@@ -17,6 +17,8 @@ import { buildOutOfOrder } from './outoforder.js';
 import { SessionPile, renderPileImage, renderPostcard, postcardNote } from './sharepile.js';
 import { PileCam } from './pilecam.js';
 import { buildCrew, person, face } from './crew.js';
+import { createPost } from './post.js';
+import { buildAtmosphere } from './atmos.js';
 import { buildSafetyBoard } from './safetyboard.js';
 import { WORKER_URL, WORLD_BUILDER_URL } from './settings.js';
 import { stats } from './stats.js';
@@ -34,7 +36,7 @@ const MAX_BODIES = isTouch ? 170 : 260;
 const DT = 1 / 180;
 
 let hubColliders = [], holeMode = false, holeAnim = null, holeThrottle = 70;
-let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew;
+let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew, post, atmos;
 const absorbing = [];
 const audio = new Audio();
 const bodies = [];
@@ -74,6 +76,7 @@ async function boot() {
   sign = buildOutOfOrder(scene);
   safety = buildSafetyBoard(scene);
   crew = buildCrew(scene);
+  atmos = buildAtmosphere(scene, { low: isTouch });
   // a real hatchback parked by the portal: the size reference everyone knows
   { const car = CATALOG.find(c => c.id === 'car'); if (car) { const b = buildObject(car), g = b.group; const bb = new THREE.Box3().setFromObject(g);
     g.position.set(19, -bb.min.y, 5.5); g.rotation.y = 0.6; g.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } }); scene.add(g); } }
@@ -89,6 +92,7 @@ async function boot() {
 
   buildUI();
   showTally();
+  post = createPost(renderer, scene, camera);
   resize();
   addEventListener('resize', resize);
   $('loading').hidden = true;
@@ -101,6 +105,7 @@ function fail(msg) { $('loading').innerHTML = `<div class="err"><b>TUNNEL</b><p>
 function resize() {
   const w = renderer.domElement.clientWidth || innerWidth, h = renderer.domElement.clientHeight || innerHeight;
   renderer.setSize(w, h, false);
+  post?.setSize(w, h);
   camera.aspect = w / h;
   // keep a usable horizontal field of view on portrait phones
   const hfov = 68 * Math.PI / 180;
@@ -566,13 +571,42 @@ function rimSnap(rec, t) {
 // weight you can feel: the camera shakes, a deep rumble, and a billow of grime, all growing with
 // the energy (a hatchback into the fan is ~10 MJ, a container landing on the chute ~1 MJ)
 let lastRumble = 0;
-let heavyLog = [];
+let heavyLog = [], hitStopUntil = 0, lastStop = 0;
 function heavyImpact(p, E) {
   if (heavyLog.length < 50) heavyLog.push(Math.round(E));
   shake = Math.max(shake, Math.min(1, (Math.log10(E) - 4) / 2.6));
   if (performance.now() - lastRumble > 140) { lastRumble = performance.now(); audio.rumble(E); }
   const n = Math.min(70, Math.round(8 + (Math.log10(E) - 4) * 18));
   particles.emit('cloud', p, { x: 0, y: 0, z: 0 }, n, 2 + Math.log10(E));
+  // the lens takes the hit too, a pressure ring rolls out, and really big ones freeze the frame for a beat
+  const k = Math.max(0, Math.min(1, (Math.log10(E) - 4.6) / 2.4));
+  post?.punch(0.15 + 0.85 * k);
+  shockwave(p, k);
+  if (k > 0.3 && performance.now() - lastStop > 900 && timeScale === 1) { lastStop = performance.now(); hitStopUntil = lastStop + 50 + 70 * k; }
+}
+
+// pressure rings: a thin bright ring that races outward from a heavy hit, always facing the camera
+const waves = [];
+function shockwave(p, k) {
+  let w = waves.find(x => x.t >= 1);
+  if (!w) {
+    if (waves.length >= 4) return;
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.965, 1, 64), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.renderOrder = 6; scene.add(m); w = { m, t: 1 }; waves.push(w);
+  }
+  w.t = 0; w.k = k; w.m.visible = true;
+  w.m.position.copy(rig.localToWorld(new THREE.Vector3(p.x, p.y, p.z)));
+}
+function stepWaves(dt) {
+  for (const w of waves) {
+    if (w.t >= 1) continue;
+    w.t = Math.min(1, w.t + dt / (0.45 + 0.35 * w.k));
+    const e = 1 - Math.pow(1 - w.t, 3);
+    w.m.scale.setScalar(1.5 + e * (6 + 22 * w.k));
+    w.m.quaternion.copy(camera.quaternion);
+    w.m.material.color.setRGB(1, 0.9, 0.75).multiplyScalar((1 - w.t) ** 2 * (0.35 + 0.9 * w.k));
+    if (w.t >= 1) w.m.visible = false;
+  }
 }
 
 function checkStall(dt) {
@@ -1547,6 +1581,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   const fdt = Math.min(0.05, (now - last) / 1000); last = now; frames++;
   let ts = timeScale;
+  if (performance.now() < hitStopUntil) ts *= 0.04;   // hit-stop: the world holds its breath for a few frames
   if (performance.now() < bulletUntil) ts = Math.min(ts, 0.12);
   acc += fdt * ts;
   let steps = 0;
@@ -1611,7 +1646,7 @@ function loop(now) {
   fan.disc.material.opacity = blur;
   for (const m of fan.mats) m.opacity = 1 - blur * 0.85;
   const on = rotor.setpoint > 0 || sp > 1;
-  tunnel.beaconMat.emissiveIntensity = on ? 0.6 + 2 * Math.max(0, Math.sin(now / 160)) : 0.1;
+  tunnel.beaconMat.emissiveIntensity = on ? 1 + 7 * Math.max(0, Math.sin(now / 160)) : 0.1;
   tunnel.beaconLight.intensity = on ? 30 : 0;
   tunnel.beaconLight.target.position.set(tunnel.beacon.position.x + Math.cos(now / 300) * 8, tunnel.beacon.position.y - 6, Math.sin(now / 300) * 8);   // tower units (1×, scaled)
 
@@ -1654,7 +1689,9 @@ function loop(now) {
   if (realAir && realAirMode !== 'off' && !(ride && ride.covered)) { try { realAir.update(fdt * ts, { bodies, air, camera, rig, hub: !holeMode }); } catch (e) { console.warn(e); setRealAir('off', true); realAirBroken = true; } }
   const cw = renderer.domElement.clientWidth;   // the split pane is gliding in or out: follow it
   if (cw !== lastCW) { lastCW = cw; resize(); }
-  if (!(pileCovers && flipping()) && !(ride && ride.covered)) renderer.render(scene, camera);
+  atmos.tick(now / 1000);
+  stepWaves(fdt);
+  if (!(pileCovers && flipping()) && !(ride && ride.covered)) post.render(fdt);
   camera.position.sub(shakeOff);   // flip mode: the tunnel is off-screen
   // bogging: anything that drags the rotor back down from the fastest it has been going (since the
   // throttle last moved) makes the motor groan; the ordinary spin-up after a throttle change doesn't

@@ -11,6 +11,22 @@ export class Audio {
     this.master = ctx.createGain(); this.master.gain.value = this.enabled ? 0.8 : 0;
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
+    // the hall: a big steel room rings for ~3.5 s (a generated impulse response: decaying noise that
+    // loses its top end as it dies away)
+    try {
+      const sr = ctx.sampleRate, n = Math.floor(sr * 3.6), ir = ctx.createBuffer(2, n, sr);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch); let lp = 0;
+        for (let i = 0; i < n; i++) {
+          const t = i / n, a = 0.06 + 0.5 * t;                       // the low-pass closes as the tail decays
+          lp += (Math.random() * 2 - 1 - lp) * (1 - a);
+          d[i] = lp * Math.pow(1 - t, 2.6) * (i < sr * 0.012 ? i / (sr * 0.012) : 1);
+        }
+      }
+      const verb = ctx.createConvolver(); verb.buffer = ir;
+      const wet = ctx.createGain(); wet.gain.value = 0.3;
+      this.master.connect(verb).connect(wet).connect(comp);
+    } catch { /* no reverb, no problem */ }
     // pink-ish noise buffer
     const len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
     let b0 = 0, b1 = 0, b2 = 0;

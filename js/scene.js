@@ -31,8 +31,8 @@ export const toWorld = (x, y, z) => new THREE.Vector3(y, TUN.groundX - x, z);
 
 export function buildScene(renderer) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#0a0b10');
-  scene.fog = new THREE.Fog('#0a0b10', 34 * S, 85 * S);
+  scene.background = new THREE.Color('#07080b');
+  scene.fog = new THREE.Fog('#0b0d12', 30 * S, 120 * S);   // haze: the far wall sits back in it
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.5;
@@ -62,7 +62,7 @@ export function buildScene(renderer) {
     for (let i = 0; i < 18; i++) { c.fillStyle = `rgba(30,28,25,${0.02 + Math.random() * 0.035})`; c.beginPath(); c.ellipse(Math.random() * w, Math.random() * h, 30 + Math.random() * 90, 20 + Math.random() * 60, Math.random() * 3, 0, 7); c.fill(); }
     c.strokeStyle = 'rgba(25,25,25,0.6)'; c.lineWidth = 3; c.strokeRect(0, 0, w, h);
   }, 12 * S);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(140 * S, 140 * S), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.82, metalness: 0.05 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(140 * S, 140 * S), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.62, metalness: 0.08, color: '#b9bcc4' }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
   // a ring of stencilled warnings around the portal
@@ -84,12 +84,6 @@ export function buildScene(renderer) {
   }
   ringTex.wrapS = THREE.RepeatWrapping;
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.012; scene.add(ring);
-
-  // hangar shell
-  const shell = new THREE.Mesh(new THREE.CylinderGeometry(52 * S, 52 * S, 36 * S, 48, 1, true), new THREE.MeshStandardMaterial({ color: '#14171c', roughness: 0.9, side: THREE.BackSide }));
-  shell.position.set(0, 18 * S, 0); scene.add(shell);
-  const lampMat = new THREE.MeshBasicMaterial({ color: '#fff6e4' });
-  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; const lamp = new THREE.Mesh(new THREE.BoxGeometry(3 * S, 0.12 * S, 0.5 * S), lampMat); lamp.position.set(Math.cos(a) * 18 * S, 30 * S, Math.sin(a) * 18 * S); lamp.rotation.y = -a; scene.add(lamp); }
 
   const tunnel = buildTunnel(rig);
   const tower = buildTower(scene);
@@ -240,17 +234,17 @@ function buildPortal(scene) {
         c += (violet * 1.6 + white * 0.3) * rim;
         c += cyan * uPulse * smoothstep(0.9, 0.0, r) * 0.9;
         float alpha = smoothstep(1.0, 0.94, r);
-        gl_FragColor = vec4(c * (1.2 + uPulse), alpha);
+        gl_FragColor = vec4(c * (1.9 + 1.5 * uPulse), alpha);   // HDR: the vortex blooms
       }`,
   });
   const disc = new THREE.Mesh(new THREE.CircleGeometry(PORTAL.R, 96), mat);
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.02; g.add(disc);
-  const rimMat = new THREE.MeshStandardMaterial({ color: '#2b0a4a', emissive: '#9b4dff', emissiveIntensity: 1.6, metalness: 0.6, roughness: 0.3 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: '#2b0a4a', emissive: '#9b4dff', emissiveIntensity: 3.2, metalness: 0.6, roughness: 0.3 });
   const rim = new THREE.Mesh(new THREE.TorusGeometry(PORTAL.R + 0.12, 0.14, 12, 96), rimMat);
   rim.rotation.x = Math.PI / 2; rim.position.y = 0.06; g.add(rim);
   // floating rune stones orbiting the rim
   const runes = new THREE.Group(); g.add(runes);
-  const runeMat = new THREE.MeshStandardMaterial({ color: '#1a1030', emissive: '#40e0ff', emissiveIntensity: 1.2, metalness: 0.4, roughness: 0.4 });
+  const runeMat = new THREE.MeshStandardMaterial({ color: '#1a1030', emissive: '#40e0ff', emissiveIntensity: 3.0, metalness: 0.4, roughness: 0.4 });
   for (let i = 0; i < 9; i++) {
     const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.18), runeMat);
     const a = i / 9 * Math.PI * 2; m.position.set(Math.cos(a) * (PORTAL.R + 0.7), 0.6 + (i % 3) * 0.2, Math.sin(a) * (PORTAL.R + 0.7)); runes.add(m);
@@ -271,7 +265,7 @@ function buildPortal(scene) {
       runes.rotation.y = t * 0.35;
       runes.children.forEach((m, i) => { m.rotation.x = t * 1.3 + i; m.position.y = 0.7 + Math.sin(t * 1.6 + i) * 0.25; });
       light.intensity = (40 + 25 * Math.sin(t * 3) + pulse * 120) * S ** 1.4;
-      rimMat.emissiveIntensity = 1.4 + 0.4 * Math.sin(t * 2.2) + pulse;
+      rimMat.emissiveIntensity = 2.8 + 0.8 * Math.sin(t * 2.2) + 3 * pulse;
       beam.material.opacity = 0.05 + 0.04 * pulse;
     },
   };

@@ -36,13 +36,13 @@ void main(){
   vCol = pcol;
 }`;
 const FS = `
-varying vec4 vCol;
+varying vec4 vCol; uniform float uBoost;
 void main(){
   vec2 d = gl_PointCoord - 0.5;
   float r = length(d);
   if (r > 0.5) discard;
   float a = vCol.a * smoothstep(0.5, 0.25, r);
-  gl_FragColor = vec4(vCol.rgb, a);
+  gl_FragColor = vec4(vCol.rgb * uBoost, a);
 }`;
 
 class Pool {
@@ -59,7 +59,7 @@ class Pool {
     this.aSize = new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('position', this.aPos); g.setAttribute('pcol', this.aCol); g.setAttribute('size', this.aSize);
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(10, 3, 0), 1000);
-    this.mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms: { uScale: { value: 600 } },
+    this.mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms: { uScale: { value: 600 }, uBoost: { value: additive ? 2.2 : 1 } },   // sparks and glints are HDR: they bloom
       transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
     this.points = new THREE.Points(g, this.mat);
     this.points.frustumCulled = false;
