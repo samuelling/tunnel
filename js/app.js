@@ -9,7 +9,7 @@ import { Air } from './air.js';
 import { aeroLoads, makePanels } from './aero.js';
 import { Rotor, buildFan, bladeSweep, bladeAngle } from './fan.js';
 import { createRenderer, buildScene, buildColliders, toWorld } from './scene.js';
-import { DropCollector, packPoints, dropTargets } from './portal.js';
+import { DropCollector, packPoints, dropTargets, destination, setDestination, DEST_NAME, GARDEN_URL } from './portal.js';
 import { CATALOG, buildObject, sanitizeRecipe, recipePrompt, MATERIALS } from './objects.js';
 import { shatterMesh, chunkMaterial } from './fracture.js';
 import { strengthOf, scaleStrength, BLADE, fmtForce } from './strength.js';
@@ -85,9 +85,9 @@ async function boot() {
   drops = new DropCollector({
     onJudge: (root) => { verdict(root); root.done = true; },
     onNoFuel: (d, refuel) => { const h = Math.max(1, Math.round(refuel / 3.6e6)); toast(`⛽ The portal is out of fuel. ${d.object.icon} ${d.object.name} is being held in Lost & Found (it refuels in about ${h} h).`); renderPayload(); },
-    onSent: (d) => { rideGot(d); reserveForRide(d); showTally(); toast(`🌀 ${d.object.icon} ${d.object.name}: ${d.pieces.length} pieces delivered to World Builder`); if (pileCam && pileCam.running && d.id) pileCam.arrive(d, { local: true }); },
-    onParked: (d) => (rideGot(d), showTally(), toast(`🌀 ${d.object.icon} ${d.object.name} went through the portal (World Builder link not set up yet)`)),
-    onFail: (d) => (rideGot(d), toast(`🌀 ${d.object.name} went through, but World Builder didn't answer. Kept it for later.`)),
+    onSent: (d) => { rideGot(d); reserveForRide(d); showTally(); toast(`🌀 ${d.object.icon} ${d.object.name}: ${d.pieces.length} pieces delivered to ${DEST_NAME[d.to] || 'World Builder'}`); if (pileCam && pileCam.running && d.id && d.to !== 'garden') pileCam.arrive(d, { local: true }); },
+    onParked: (d) => (rideGot(d), showTally(), toast(`🌀 ${d.object.icon} ${d.object.name} went through the portal (${DEST_NAME[d.to] || 'World Builder'} link not set up yet)`)),
+    onFail: (d) => (rideGot(d), toast(`🌀 ${d.object.name} went through, but ${DEST_NAME[d.to] || 'World Builder'} didn't answer. Kept it for later.`)),
   });
 
   buildUI();
@@ -956,7 +956,7 @@ function openPayloadHatch(why) {
   audio.start(); audio.hit('clang', 1.5e4); setTimeout(() => audio.whoosh(40), 250);
   hatchState = 'opening'; hatchT = 0;
   stats.count('flushes');
-  if (why === 'lever' && rideOn()) startRide();
+  if (why === 'lever' && rideOn()) { if (destination() === 'garden') toast('🎢 Ride along only goes to World Builder: this flush is going to the garden'); else startRide(); }
   drops.hold = true;
   // flip mode: get Pile Cam going now (so the payload is caught as it's sent), slide over once the doors are open
   if (!ride && flipping() && !onPile) { if ($('paneSrc').value !== 'live') pileCam?.start(); setTimeout(() => showPile(true), 1300); }
@@ -964,9 +964,10 @@ function openPayloadHatch(why) {
   thawHatch();
   for (const b of bodies) if (onHatch(b)) b.body.wakeUp();
   portal.flash(0.6);
-  if (why === 'full') toast('🌀 PORTAL CHUTE FULL! Flushing it to World Builder');
+  const where = destination() === 'garden' ? 'the garden\'s wormhole' : 'World Builder';
+  if (why === 'full') toast(`🌀 PORTAL CHUTE FULL! Flushing it to ${where}`);
   else if (why === 'idle') toast('🌀 The Portal Chute got bored and flushed itself');
-  else toast(`🌀 FLUSH! ${payloadStat.n} thing${payloadStat.n === 1 ? '' : 's'} down the Portal Chute to World Builder`);
+  else toast(`🌀 FLUSH! ${payloadStat.n} thing${payloadStat.n === 1 ? '' : 's'} down the Portal Chute to ${where}`);
 }
 let hatchClock = 0;
 function hatchTick() {
@@ -1419,8 +1420,21 @@ function worldBuilderUrl() {
   return u || WORLD_BUILDER_URL;
 }
 function openWarp() {
+  if (destination() === 'garden') { warpTo(GARDEN_URL); return; }   // flushing to the garden: the teleport goes there too, to the junk heap
   $('warpUrl').value = worldBuilderUrl();
   $('warp').hidden = false;
+}
+function warpTo(href) {
+  stats.count('warps'); flushInstantly(); audio.whoosh?.(40); document.body.classList.add('warping');
+  setTimeout(() => { if (window.top !== window) { window.open(href, '_blank', 'noopener'); document.body.classList.remove('warping'); } else location.href = href; }, 850);
+}
+// where a flush goes: World Builder or the garden (portal.js)
+function setDest(d, say) {
+  setDestination(d); const g = d === 'garden';
+  $('plToW').setAttribute('aria-pressed', String(!g)); $('plToG').setAttribute('aria-pressed', String(g));
+  $('btnWarp').dataset.title = g ? 'Teleport yourself into the Garden of Delight, to the junk heap' : 'Teleport yourself into World Builder, to the Shred Pile';
+  TOOL_TIPS.btnWarp[1] = g ? 'Leave the Shred Hole for the Garden of Delight' : 'Leave the Shred Hole for World Builder';
+  if (say) toast(g ? '🌳 Flushes now go to the Garden of Delight: out of a wormhole onto a junk heap, for building' : '🌍 Flushes now go to World Builder, onto the Shred Pile');
 }
 function warpToWorldBuilder() {
   stats.count('warps');
@@ -1772,6 +1786,9 @@ function buildUI() {
   $('hatch').onclick = pullHatch;
   $('plLever').onclick = () => openPayloadHatch('lever');
   setRideToggle(rideOn());
+  setDest(destination(), false);
+  $('plToW').onclick = () => setDest('world', true);
+  $('plToG').onclick = () => setDest('garden', true);
   $('plRide').onclick = () => { setRideToggle(!rideOn()); toast(rideOn() ? '🎢 Ride along is on: pull FLUSH! and go with the payload' : 'Ride along is off'); };
   $('rideSkip').onclick = skipTube;
   $('rideLive').onclick = () => rideLive(!ride?.live);

@@ -463,6 +463,7 @@ export class PileCam {
         for (const d of got) {
           const key = d.id || `${d.at}:${d.object?.name}`;
           if (this.seen.has(key) || this.reserved.has(key) || !Array.isArray(d.pieces)) continue;   // a ride brings that one in itself
+          if (d.to === 'garden') { this.seen.add(key); this.lastAt = Math.max(this.lastAt, d.at || 0); continue; }   // that one went to the Garden of Delight, not the Shred Pile
           fresh++;
           if (this.first) { this.seen.add(key); this.lastAt = Math.max(this.lastAt, d.at || 0); backlog.push(d); }
           else this.arrive(d);

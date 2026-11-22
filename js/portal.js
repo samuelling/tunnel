@@ -14,6 +14,20 @@
 //   particles: { count, colors }
 // }
 import { WORKER_URL, DROP_URLS } from './settings.js';
+
+// Where a flush goes: Matt's World Builder (the default), or the Garden of Delight, where the pieces come out of a wormhole onto a
+// junk heap and can be built with. A garden drop goes only to the mailbox, marked to: 'garden'; the garden reads it from there.
+// ?to=garden or ?to=world in the address sets it; the choice is remembered in this browser.
+export const GARDEN_URL = 'https://samuelling.github.io/Blackhole/?at=wormhole';
+export const DEST_NAME = { world: 'World Builder', garden: 'the Garden of Delight' };
+export function destination() {
+  try {
+    const q = new URLSearchParams(location.search).get('to');
+    if (q === 'garden' || q === 'world') localStorage.setItem('shredTo', q);
+    return localStorage.getItem('shredTo') === 'garden' ? 'garden' : 'world';
+  } catch (e) { return 'world'; }
+}
+export function setDestination(d) { try { localStorage.setItem('shredTo', d === 'garden' ? 'garden' : 'world'); } catch (e) { /* storage blocked */ } }
 import { thinPoints, slimDrop, WIRE_POINTS } from './dropcodec.js';
 
 const MAX_PIECES = 120, MAX_POINTS = WIRE_POINTS;
@@ -136,7 +150,8 @@ export class DropCollector {
 
   async dispatch(drop) {
     this.last = drop;
-    const targets = dropTargets();
+    if (!drop.to) drop.to = destination();   // decided when it goes, not when it was shredded
+    const targets = drop.to === 'garden' ? dropTargets().filter(isRelay) : dropTargets();
     const n = drop.pieces.length;
     this.sentPieces += n;
     try { localStorage.setItem('shredSent', String(this.sentPieces)); } catch (e) { /* ignore */ }
@@ -194,13 +209,13 @@ export function mergeDrops(list) {
   const budget = Math.min(MAX_PAYLOAD_PIECES, total);
   const pts = total > 200 ? 12 : MAX_POINTS;
   const pieces = [];
-  for (const d of list) {
+  for (const [k, d] of list.entries()) {
     const share = Math.max(Math.min(8, d.pieces.length), Math.round(budget * d.pieces.length / total));
     for (const pc of d.pieces.slice(0, share)) {
       const n = pc.p.length / 3, step = Math.max(1, Math.ceil(n / pts));
       const p = [];
       for (let i = 0; i < n; i += step) p.push(pc.p[i * 3], pc.p[i * 3 + 1], pc.p[i * 3 + 2]);
-      pieces.push({ ...pc, p });
+      pieces.push({ ...pc, p, k });   // k: which of the payload's objects this piece came from
     }
   }
   const objects = list.map(d => ({ name: d.object.name, icon: d.object.icon, verdict: d.object.verdict, mass: d.object.mass, pieces: d.pieces.length }));
