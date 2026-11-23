@@ -52,6 +52,12 @@ Drops go to `WORKER_URL/drops` (the Cloudflare Worker's KV mailbox) and to any U
 
 The Portal Chute has a **🌍 WORLD / 🌳 GARDEN** switch. With GARDEN chosen, a flush goes only to the mailbox, marked `"to": "garden"`, and not to World Builder; the [Garden of Delight](https://samuelling.github.io/Blackhole/) reads its own drops from the mailbox, and the pieces come out of a wormhole in a clearing onto a junk heap, where they can be lifted and built with like stone (each piece keeps its hull, mass and colours). Pile Cam leaves garden drops out, Ride Along goes to World Builder only, and 🌀 teleports to the junk heap (`?at=wormhole`). `?to=garden` or `?to=world` in the address sets the switch; it is remembered in the browser. Payload pieces now carry `k`, the index of the object in `objects` they came from.
 
+### Shred it, or send it whole
+
+Under the destination the Portal Chute has **🔪 SHRED / 📦 WHOLE**. With WHOLE on, what you throw never meets the blades: as it comes down on the fan a bypass crane takes it, swings it round them and lets it go below, and it waits in the Portal Chute in one piece ("SENT THROUGH WHOLE"). `?whole=1` / `?whole=0` sets it; it is remembered in the browser.
+
+Anything that reaches the portal in one piece (sent whole, or too tough for the fan) travels with its recipe: the drop's `object.recipe` (in a payload, `objects[k].recipe`: id, name, icon, mass and parts, without the jokes), and each of its pieces is marked `u` (which one of them it was). World Builder ignores both and draws the pieces as before. The Garden of Delight rebuilds the actual thing from the recipe, so a garden drop carries only one piece per whole thing, for its pose and speed: a payload of a duck, a watermelon and a banana is 2.6 KB on the wire.
+
 ## Type anything (Claude designs the object)
 
 The ✨ tile lets players type any object. Claude returns a JSON recipe: primitive parts with real dimensions, colours and materials, plus mass, toughness, what sprays out, what it sounds like, a verdict line and a physics fact. Built-in objects use the same recipe format (`js/objects.js`), so generated objects get the same physics.

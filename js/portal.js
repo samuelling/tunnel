@@ -10,7 +10,9 @@
 //               p: [x,y,z, x,y,z, …] convex-hull points in the piece's own frame,
 //               q: [x,y,z,w] the piece's orientation in the world (y up) as it entered,
 //               o: [x,y,z] offset from the object's centre (world axes; 0 for loose chunks),
-//               v: [vx,vy,vz] velocity entering the portal (world: y up) } ],
+//               v: [vx,vy,vz] velocity entering the portal (world: y up),
+//               u: n  (only on a part of a thing that came through in one piece: which one of them it was) } ],
+//   object.recipe: the thing's recipe (js/objects.js), when any of it came through in one piece; in a payload, objects[k].recipe
 //   particles: { count, colors }
 // }
 import { WORKER_URL, DROP_URLS } from './settings.js';
@@ -26,6 +28,22 @@ export function destination() {
     if (q === 'garden' || q === 'world') localStorage.setItem('shredTo', q);
     return localStorage.getItem('shredTo') === 'garden' ? 'garden' : 'world';
   } catch (e) { return 'world'; }
+}
+// Shred or send whole: with WHOLE on, a bypass crane lifts each thing over the blades and it goes through the portal in one piece. Any
+// thing that reaches the portal in one piece (sent whole, or tough enough to come through the fan) travels with its recipe, so the far
+// side can rebuild the actual object rather than its outline. ?whole=1 / ?whole=0 in the address sets it; remembered in this browser.
+export function wholeMode() {
+  try {
+    const q = new URLSearchParams(location.search).get('whole');
+    if (q === '1' || q === '0') localStorage.setItem('shredWhole', q);
+    return localStorage.getItem('shredWhole') === '1';
+  } catch (e) { return false; }
+}
+export function setWholeMode(on) { try { localStorage.setItem('shredWhole', on ? '1' : '0'); } catch (e) { /* storage blocked */ } }
+// a recipe as it travels: what is needed to build the thing, without the jokes
+export function travelRecipe(r) {
+  if (!r || !Array.isArray(r.parts)) return null;
+  return { id: r.id, name: r.name, icon: r.icon, mass: r.mass, inner: r.inner, aero: r.aero, parts: r.parts.slice(0, 40) };
 }
 export function setDestination(d) { try { localStorage.setItem('shredTo', d === 'garden' ? 'garden' : 'world'); } catch (e) { /* storage blocked */ } }
 import { thinPoints, slimDrop, WIRE_POINTS } from './dropcodec.js';
@@ -114,7 +132,8 @@ export class DropCollector {
       const g = byRoot.get(d._root);
       if (!g) { byRoot.set(d._root, { ...d, pieces: [...d.pieces], particles: { ...d.particles } }); continue; }
       g.pieces.push(...d.pieces); g.particles.count += d.particles?.count || 0;
-      if (d.object.verdict && d.object.verdict !== 'SHREDDED' && d.object.verdict !== 'SENT THROUGH WHOLE') g.object = d.object;
+      if (d.object.verdict && d.object.verdict !== 'SHREDDED' && d.object.verdict !== 'SENT THROUGH WHOLE') g.object = { ...d.object, recipe: d.object.recipe || g.object.recipe };
+      else if (d.object.recipe && !g.object.recipe) g.object = { ...g.object, recipe: d.object.recipe };
     }
     const list = [...byRoot.values()];
     for (const d of list) { delete d._root; d.pieces.sort((a, b) => b.m - a.m); d.pieces = d.pieces.slice(0, MAX_PIECES); }
@@ -140,7 +159,8 @@ export class DropCollector {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)),
       at: Date.now(),
       source: 'shred-hole',
-      object: { name: r.name, icon: r.icon || '✨', verdict: d.root.verdictHead || (d.root.firstHit ? 'SHREDDED' : 'SENT THROUGH WHOLE'), quip: d.root.verdictQuip || '', mass: +d.root.mass0.toFixed(3) },
+      object: { name: r.name, icon: r.icon || '✨', verdict: d.root.verdictHead || (d.root.firstHit ? 'SHREDDED' : 'SENT THROUGH WHOLE'), quip: d.root.verdictQuip || '', mass: +d.root.mass0.toFixed(3),
+        ...(pieces.some(p => p.u != null) ? { recipe: travelRecipe(r) } : {}) },   // u: the piece is part of a thing that came through in one piece
       spray: r.spray,
       colors: [...new Set(r.parts.map(p => p.color).concat(r.inner || []))].slice(0, 8),
       pieces,
@@ -152,6 +172,7 @@ export class DropCollector {
     this.last = drop;
     if (!drop.to) drop.to = destination();   // decided when it goes, not when it was shredded
     const targets = drop.to === 'garden' ? dropTargets().filter(isRelay) : dropTargets();
+    if (drop.to === 'garden') leanForGarden(drop);
     const n = drop.pieces.length;
     this.sentPieces += n;
     try { localStorage.setItem('shredSent', String(this.sentPieces)); } catch (e) { /* ignore */ }
@@ -204,6 +225,14 @@ export class DropCollector {
 
 // Several drops → one payload. Each object keeps a fair share of the piece budget, and pieces
 // carry fewer hull points when the payload is big, so it stays well under the relay's size limit.
+// The garden rebuilds a thing that came through in one piece from its recipe, so of its parts only one needs to travel (for where it
+// was, how it was turned and how fast it was going). World Builder draws pieces, so drops for it keep them all.
+function leanForGarden(drop) {
+  const hasRecipe = k => !!(k != null && drop.objects ? drop.objects[k]?.recipe : drop.object?.recipe);
+  const seen = new Set();
+  drop.pieces = drop.pieces.filter(pc => { if (pc.u == null || !hasRecipe(pc.k)) return true; const key = (pc.k ?? '') + ':' + pc.u; if (seen.has(key)) return false; seen.add(key); return true; });
+}
+
 export function mergeDrops(list) {
   const total = list.reduce((s, d) => s + d.pieces.length, 0);
   const budget = Math.min(MAX_PAYLOAD_PIECES, total);
@@ -218,7 +247,7 @@ export function mergeDrops(list) {
       pieces.push({ ...pc, p, k });   // k: which of the payload's objects this piece came from
     }
   }
-  const objects = list.map(d => ({ name: d.object.name, icon: d.object.icon, verdict: d.object.verdict, mass: d.object.mass, pieces: d.pieces.length }));
+  const objects = list.map(d => ({ name: d.object.name, icon: d.object.icon, verdict: d.object.verdict, mass: d.object.mass, pieces: d.pieces.length, ...(d.object.recipe ? { recipe: d.object.recipe } : {}) }));
   const names = objects.map(o => o.name).join(', ');
   return {
     v: 1,

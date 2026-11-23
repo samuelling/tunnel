@@ -9,7 +9,7 @@ import { Air } from './air.js';
 import { aeroLoads, makePanels } from './aero.js';
 import { Rotor, buildFan, bladeSweep, bladeAngle } from './fan.js';
 import { createRenderer, buildScene, buildColliders, toWorld } from './scene.js';
-import { DropCollector, packPoints, dropTargets, destination, setDestination, DEST_NAME, GARDEN_URL } from './portal.js';
+import { DropCollector, packPoints, dropTargets, destination, setDestination, DEST_NAME, GARDEN_URL, wholeMode, setWholeMode } from './portal.js';
 import { CATALOG, buildObject, sanitizeRecipe, recipePrompt, MATERIALS } from './objects.js';
 import { shatterMesh, chunkMaterial } from './fracture.js';
 import { strengthOf, scaleStrength, BLADE, fmtForce } from './strength.js';
@@ -212,7 +212,8 @@ function removeBody(rec, reason, keepMesh = false) {
 }
 
 function newRoot(recipe) {
-  const r = { id: Math.random(), recipe, mass0: 0, live: new Set(), exitedMax: 0, dissolved: 0, firstHit: 0, maxE: 0, rpmDrop: 0, pieces: 0, done: false, thrown: simTime };
+  const r = { id: Math.random(), recipe, mass0: 0, live: new Set(), exitedMax: 0, dissolved: 0, firstHit: 0, maxE: 0, rpmDrop: 0, pieces: 0, done: false, thrown: simTime,
+    whole: recipe.id !== 'blade-shard' && wholeMode(), wholeN: 0 };   // whole: sent over the blades by the bypass crane, in one piece
   roots.set(r.id, r);
   return r;
 }
@@ -410,7 +411,7 @@ function physicsStep(dt) {
     const f = ev.totalForceMagnitude();
     for (const h of [ev.collider1(), ev.collider2()]) {
       const rec = byCollider.get(h);
-      if (rec && rec.level === 0 && rec.impact > 0 && f > rec.impact && !rec.dead) { rec.dead = true; pending.push({ rec, E: physFor(rec).Ebreak * 1.5, kind: 'impact' }); }
+      if (rec && rec.level === 0 && rec.impact > 0 && f > rec.impact && !rec.dead && !rec.root.whole) { rec.dead = true; pending.push({ rec, E: physFor(rec).Ebreak * 1.5, kind: 'impact' }); }
     }
   });
 
@@ -418,7 +419,7 @@ function physicsStep(dt) {
   const th0 = rotor.prevTheta, th1 = rotor.theta;
   if (!holeMode && Math.abs(rotor.omega) > 0.2) {
     for (const rec of bodies) {
-      if (rec.dead || simTime < rec.cool) continue;
+      if (rec.dead || simTime < rec.cool || rec.root.whole) continue;   // the bypass crane carries it past
       const t = rec.body.translation();
       const p = new THREE.Vector3(t.x - fanC.x, t.y - fanC.y, t.z - fanC.z);
       const hit = bladeSweep(p, rec.radius, th0, th1);
@@ -664,6 +665,17 @@ function updateDamageUI() {
   $('btnRepair').onclick = repairFan;
 }
 
+// WHOLE: as a thing comes down on the fan, the bypass crane takes it, swings it round the blades and lets it go below them
+let craneToastAt = 0;
+function craneOver(rec, t, rr) {
+  rec.craned = true;
+  rr = rr || 1; const rc = Math.min(1.7 * S, Math.max(0.6 * S, rr));
+  for (const h of rec.colliders) world.getCollider(h)?.setSensor(true);
+  rec.body.setGravityScale(0, true); rec.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  extracting.push({ rec, t0: performance.now(), ms: 1300 + Math.min(1200, Math.log10(rec.mass + 1) * 400), from: new THREE.Vector3(t.x, t.y, t.z), to: new THREE.Vector3(TUN.L + 0.25 * S, t.y / rr * rc, t.z / rr * rc) });
+  audio.hit('thunk', 600);
+  if (performance.now() - craneToastAt > 4000) { craneToastAt = performance.now(); toast(`📦 Bypass crane: lifting the ${rec.recipe.name.toLowerCase()} over the blades, in one piece`); }
+}
 function stepExtraction() {
   for (let i = extracting.length - 1; i >= 0; i--) {
     const e = extracting[i];
@@ -754,6 +766,7 @@ function checkVerdicts() {
     if (root.firstHit && age > (root.recipe.unbreakable ? 0.4 : 1.1)) { verdict(root); root.done = true; continue; }
     if (!root.firstHit && root.live.size === 0) {
       root.done = true;
+      if (root.whole) { showVerdict(root.recipe, 'SENT THROUGH WHOLE', 'Lifted over the blades without a scratch. It goes through in one piece.', ''); continue; }
       if (root.exitedMax > 0) showVerdict(root.recipe, 'SLIPPED THROUGH', 'Threaded between the blades. Statistically rude.', '');
     }
     if (!root.firstHit && simTime - root.thrown > 120) root.done = true;
@@ -806,12 +819,13 @@ function absorb(rec) {
   const tmpQ = new THREE.Quaternion(q.x, q.y, q.z, q.w);
   // world orientation = rig rotation ∘ body orientation
   const wq = rig.quaternion.clone().multiply(tmpQ);
+  const u = rec.level === 0 ? root.wholeN++ : null;   // in one piece: the far side can rebuild the thing itself from its recipe
   const pieces = rec.parts.map(p => {
     const off = p.center.clone().applyQuaternion(wq);
     return { c: p.color || '#999999', i: rec.recipe.inner || p.color || '#999999', m: +p.mass.toFixed(4),
       p: packPoints(p.points.map(v3 => v3.clone().sub(p.center))),
       o: [+off.x.toFixed(3), +off.y.toFixed(3), +off.z.toFixed(3)],
-      v: [+(v.y).toFixed(2), +(-v.x).toFixed(2), +(v.z).toFixed(2)], q: [wq.x, wq.y, wq.z, wq.w].map(x => +x.toFixed(4)) };
+      v: [+(v.y).toFixed(2), +(-v.x).toFixed(2), +(v.z).toFixed(2)], q: [wq.x, wq.y, wq.z, wq.w].map(x => +x.toFixed(4)), ...(u != null ? { u } : {}) };
   });
   drops.add(root, pieces);
   const gid = ++pileGroup;   // parts of one rigid body stay together in the heap
@@ -1429,6 +1443,12 @@ function warpTo(href) {
   setTimeout(() => { if (window.top !== window) { window.open(href, '_blank', 'noopener'); document.body.classList.remove('warping'); } else location.href = href; }, 850);
 }
 // where a flush goes: World Builder or the garden (portal.js)
+// shred it, or send it whole: what is thrown from now on (portal.js)
+function setWhole(on, say) {
+  setWholeMode(on);
+  $('plShred').setAttribute('aria-pressed', String(!on)); $('plWhole').setAttribute('aria-pressed', String(on));
+  if (say) toast(on ? '📦 WHOLE: the bypass crane lifts what you throw over the blades and it goes through the portal in one piece' : '🔪 SHRED: what you throw meets the blades');
+}
 function setDest(d, say) {
   setDestination(d); const g = d === 'garden';
   $('plToW').setAttribute('aria-pressed', String(!g)); $('plToG').setAttribute('aria-pressed', String(g));
@@ -1606,7 +1626,7 @@ function loop(now) {
   // auto bullet-time when a whole object is about to meet the blades
   if (autoBullet && Math.abs(rotor.omega) > 5) {
     for (const rec of bodies) {
-      if (rec.level !== 0 || rec.root.bulleted) continue;
+      if (rec.level !== 0 || rec.root.bulleted || rec.root.whole) continue;
       const t = rec.body.translation();
       const vx = rec.body.linvel().x;
       if (t.x > TUN.fanX - 1.2 * S - Math.max(0, vx) * 0.12 && t.x < TUN.fanX && Math.hypot(t.y - TUN.y0, t.z) < TUN.R) {
@@ -1623,6 +1643,7 @@ function loop(now) {
     rec.group.quaternion.set(q.x, q.y, q.z, q.w);
     const rr = Math.hypot(t.y, t.z);
     if (rec.radius > TUN.R - 0.5 && t.x > -rec.radius - 0.5 && t.x < rec.radius + 1 && rimSnap(rec, t)) continue;
+    if (rec.root.whole && rec.level === 0 && !rec.craned && t.x > TUN.fanX - 2.5 * S - rec.radius && t.x < TUN.L) craneOver(rec, t, rr);
     if (t.x > TUN.groundX - 1.4 * S - rec.radius && rr < PORTAL.R * 0.95) absorb(rec);
     else if (t.x > TUN.groundX + 2 * S || t.x < -40 * S || Math.abs(t.y) > 40 * S || Math.abs(t.z) > 40 * S) removeBody(rec, 'exit');
     else if (rec.level > 0 && t.x > TUN.groundX - 0.8 * S && simTime - rec.born > 90) removeBody(rec, 'dissolve');
@@ -1789,6 +1810,9 @@ function buildUI() {
   setDest(destination(), false);
   $('plToW').onclick = () => setDest('world', true);
   $('plToG').onclick = () => setDest('garden', true);
+  setWhole(wholeMode(), false);
+  $('plShred').onclick = () => setWhole(false, true);
+  $('plWhole').onclick = () => setWhole(true, true);
   $('plRide').onclick = () => { setRideToggle(!rideOn()); toast(rideOn() ? '🎢 Ride along is on: pull FLUSH! and go with the payload' : 'Ride along is off'); };
   $('rideSkip').onclick = skipTube;
   $('rideLive').onclick = () => rideLive(!ride?.live);
