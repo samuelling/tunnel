@@ -36,7 +36,7 @@
 import { RECIPE_SYSTEM, recipeUser, objectKey, looseKey } from '../js/prompt.js';
 import { slimDrop } from '../js/dropcodec.js';
 
-const DEFAULT_ORIGINS = ['https://samuelling.github.io'];
+const DEFAULT_ORIGINS = ['https://linglab.org', 'https://samuelling.github.io'];
 const CACHE = 'https://tunnel-cache.invalid/';
 const SHELF_MAX = 300;
 const EXCUSES = ['Claude went home.', 'Out to lunch.', 'Stocktake.', 'Gone fishing (for objects).', 'Union meeting.', 'The 3D printer jammed. Again.', 'Inventory of left socks.', 'Staff training: “What is a chair?”'];

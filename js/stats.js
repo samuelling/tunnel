@@ -23,7 +23,7 @@ const device = (() => {
   return touch ? (w >= 700 ? 'tablet' : 'phone') : 'desktop';
 })();
 const ref = (() => { try { const r = document.referrer ? new URL(document.referrer).hostname : ''; return r && r !== location.hostname ? r.replace(/^www\./, '').slice(0, 60) : ''; } catch (e) { return ''; } })();
-const where = location.hostname.endsWith('github.io') ? 'site' : location.hostname.includes('claude') ? 'claude' : location.hostname.slice(0, 40);
+const where = (location.hostname.endsWith('github.io') || /(^|\.)linglab\.org$/.test(location.hostname)) ? 'site' : location.hostname.includes('claude') ? 'claude' : location.hostname.slice(0, 40);
 
 function send(kind) {
   if (off) return;

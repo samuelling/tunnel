@@ -4,7 +4,7 @@ A 15-metre vertical wind tower with a 4.6-metre fan at the bottom. Drop somethin
 
 Silly premise, real physics underneath. The scientific 2D version (lattice-Boltzmann CFD) lives on in [`/lab`](lab/).
 
-**Play:** https://samuelling.github.io/Tunnel/ (GitHub Pages, serving the repo root)
+**Play:** https://linglab.org/tunnel/ (GitHub Pages, serving the repo root)
 
 ## What's modelled
 
@@ -50,7 +50,7 @@ Drops go to `WORKER_URL/drops` (the Cloudflare Worker's KV mailbox) and to any U
 
 ### …or to the Garden of Delight
 
-The Portal Chute has a **🌍 WORLD / 🌳 GARDEN** switch. With GARDEN chosen, a flush goes only to the mailbox, marked `"to": "garden"`, and not to World Builder; the [Garden of Delight](https://samuelling.github.io/Blackhole/) reads its own drops from the mailbox, and the pieces come out of a wormhole in a clearing onto a junk heap, where they can be lifted and built with like stone (each piece keeps its hull, mass and colours). Pile Cam leaves garden drops out, Ride Along goes to World Builder only, and 🌀 teleports to the junk heap (`?at=wormhole`). `?to=garden` or `?to=world` in the address sets the switch; it is remembered in the browser. Payload pieces now carry `k`, the index of the object in `objects` they came from.
+The Portal Chute has a **🌍 WORLD / 🌳 GARDEN** switch. With GARDEN chosen, a flush goes only to the mailbox, marked `"to": "garden"`, and not to World Builder; the [Garden of Delight](https://linglab.org/blackhole/) reads its own drops from the mailbox, and the pieces come out of a wormhole in a clearing onto a junk heap, where they can be lifted and built with like stone (each piece keeps its hull, mass and colours). Pile Cam leaves garden drops out, Ride Along goes to World Builder only, and 🌀 teleports to the junk heap (`?at=wormhole`). `?to=garden` or `?to=world` in the address sets the switch; it is remembered in the browser. Payload pieces now carry `k`, the index of the object in `objects` they came from.
 
 ### Shred it, or send it whole
 
@@ -136,7 +136,7 @@ lab/             the original 2D lattice-Boltzmann wind tunnel
 
 ### Usage dashboard
 
-**[samuelling.github.io/Tunnel/stats.html](https://samuelling.github.io/Tunnel/stats.html)** shows visits and visitors per day, how many pressed start, time per visit, objects thrown (and which), blend/survive/jam counts, flushes, new designs, deliveries to World Builder, devices, countries, referring sites, and the Fabricator's tickets, tokens and portal fuel right now. Pick 7, 30, 90 days or a year; it refreshes every minute.
+**[linglab.org/tunnel/stats.html](https://linglab.org/tunnel/stats.html)** shows visits and visitors per day, how many pressed start, time per visit, objects thrown (and which), blend/survive/jam counts, flushes, new designs, deliveries to World Builder, devices, countries, referring sites, and the Fabricator's tickets, tokens and portal fuel right now. Pick 7, 30, 90 days or a year; it refreshes every minute.
 
 At the top, two **odometers**: the Claude meter (tokens spent on designs, dollars at Sonnet 5.5 prices, tokens per design) and the Cloudflare meter (Worker requests, KV writes and reads, Durable Object requests this month, each against what Workers Paid includes). The Cloudflare numbers come from Cloudflare's analytics API through the Worker, which needs a read-only token as the secret `CF_ANALYTICS_TOKEN` (template "Read analytics and logs"); they're cached 5 minutes.
 

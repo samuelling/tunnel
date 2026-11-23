@@ -10,7 +10,7 @@ BOOST_PER_DAY = "400"
 BOOST_PER_HOUR = "75"
 BOOST_FUEL_PER_DAY = "3000"
 # Comma-separated list of sites allowed to call this Worker
-ALLOWED_ORIGINS = "https://samuelling.github.io"
+ALLOWED_ORIGINS = "https://linglab.org,https://samuelling.github.io"
 # Cheaper/faster alternative: "claude-haiku-5-5"
 MODEL = "claude-sonnet-5-5"
 # New Claude designs per person per hour (counted in the visitor's browser); Warehouse objects are free

@@ -20,7 +20,7 @@ import { WORKER_URL, DROP_URLS } from './settings.js';
 // Where a flush goes: Matt's World Builder (the default), or the Garden of Delight, where the pieces come out of a wormhole onto a
 // junk heap and can be built with. A garden drop goes only to the mailbox, marked to: 'garden'; the garden reads it from there.
 // ?to=garden or ?to=world in the address sets it; the choice is remembered in this browser.
-export const GARDEN_URL = 'https://samuelling.github.io/Blackhole/?at=wormhole';
+export const GARDEN_URL = 'https://linglab.org/blackhole/?at=wormhole';
 export const DEST_NAME = { world: 'World Builder', garden: 'the Garden of Delight' };
 export function destination() {
   try {

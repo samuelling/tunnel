@@ -91,7 +91,7 @@ function slimDrop(d, maxPoints = WIRE_POINTS) {
 }
 
 // worker.js
-var DEFAULT_ORIGINS = ["https://samuelling.github.io"];
+var DEFAULT_ORIGINS = ["https://linglab.org", "https://samuelling.github.io"];
 var CACHE = "https://tunnel-cache.invalid/";
 var SHELF_MAX = 300;
 var EXCUSES = ["Claude went home.", "Out to lunch.", "Stocktake.", "Gone fishing (for objects).", "Union meeting.", "The 3D printer jammed. Again.", "Inventory of left socks.", "Staff training: \u201CWhat is a chair?\u201D"];

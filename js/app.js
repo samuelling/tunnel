@@ -861,7 +861,7 @@ async function openShare() {
 // both sides of the card, and how to send them (as pictures: Messages and Mail attach them)
 const postcard = { side: 'front', urls: {}, files: [] };
 async function printPostcard() {
-  const site = /github\.io/.test(location.host) ? location.origin + location.pathname : 'samuelling.github.io/Tunnel';
+  const site = /github\.io|linglab\.org/.test(location.host) ? location.origin + location.pathname : 'linglab.org/tunnel';
   let pc;
   try { pc = await renderPostcard(pile, { url: site.replace(/^https?:\/\//, ''), to: $('pcTo').value.trim(), note: $('pcNote').value.trim(), bill: lifetimeBill() }); }
   catch (e) { console.error(e); $('shareMsg').textContent = 'The printing press jammed too. Try again?'; return; }
@@ -870,7 +870,7 @@ async function printPostcard() {
   postcard.files = [new File([pc.front], 'shred-hole-postcard.png', { type: 'image/png' }), new File([pc.back], 'shred-hole-postcard-back.png', { type: 'image/png' })];
   $('shareImg').src = postcard.urls[postcard.side]; $('shareImg').hidden = false; $('pcFlip').hidden = false;
   const to = $('pcTo').value.trim();
-  const shredUrl = 'https://samuelling.github.io/Tunnel/', zineUrl = 'https://megazine.org';
+  const shredUrl = 'https://linglab.org/tunnel/', zineUrl = 'https://megazine.org';
   const text = `${to ? to + ', a' : 'A'} postcard from the Shred Hole ✉️\nShred your own: ${shredUrl}\nMore weird stuff from megaZINE: ${zineUrl}`;
   $('shareMsg').textContent = 'Tap ✉️ Send postcard to pick Messages, Mail or anything else. Both sides go as pictures.';
   const canFiles = !!(navigator.canShare && navigator.canShare({ files: postcard.files }));
