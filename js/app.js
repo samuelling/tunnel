@@ -60,7 +60,7 @@ async function boot() {
   camera = new THREE.PerspectiveCamera(48, 1, 0.08, 200 * S);
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1; controls.maxDistance = 45 * S;
+  controls.maxPolarAngle = Math.PI * 0.7;   // you can get under the target and look up at the plant (the floor stops the camera, below) controls.minDistance = 1; controls.maxDistance = 45 * S;
   setCamera(0, true);
 
   world = new RAPIER.World({ x: G, y: 0, z: 0 });   // tube frame: gravity points down the axis (+x)
@@ -79,7 +79,7 @@ async function boot() {
   atmos = buildAtmosphere(scene, { low: isTouch });
   // a real hatchback parked by the portal: the size reference everyone knows
   { const car = CATALOG.find(c => c.id === 'car'); if (car) { const b = buildObject(car), g = b.group; const bb = new THREE.Box3().setFromObject(g);
-    g.position.set(19, -bb.min.y, 5.5); g.rotation.y = 0.6; g.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } }); scene.add(g); } }
+    g.position.set(17.5, -bb.min.y, 3.5); g.rotation.y = 0.5; g.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } }); scene.add(g); } }
   rig.add(fan.group);
   particles = new Particles(rig);
   drops = new DropCollector({
@@ -109,7 +109,7 @@ function resize() {
   camera.aspect = w / h;
   // keep a usable horizontal field of view on portrait phones
   const hfov = 68 * Math.PI / 180;
-  camera.fov = Math.min(84, Math.max(48, 2 * Math.atan(Math.tan(hfov / 2) / camera.aspect) * 180 / Math.PI));
+  camera.fov = Math.min(84, Math.max(camFov, 2 * Math.atan(Math.tan(hfov / 2) / camera.aspect) * 180 / Math.PI));
   camera.updateProjectionMatrix();
   particles.setScale(renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360)));
 }
@@ -118,14 +118,17 @@ function resize() {
 // laid out for the 1× plant and scaled up with it
 const GX = TUN0.groundX, FY = TUN0.groundX - TUN0.fanX;
 const CAMS = [
-  { name: 'Overview', pos: [26.5, 3.2, 18.5], tgt: [0, 8.0, 0] },   // low and far, looking up: it should loom
+  // standing on the floor 46 m from the plant, at eye height, with a wide lens tilted up at it: close
+  // and wide is what makes a big thing loom (far and long flattens it into a model)
+  { name: 'Overview', pos: [12.57, 0.57, 8.79], tgt: [0, 5.85, 0], fov: 64 },
   { name: 'Hopper', pos: [3.4, GX + 5.5, 4.2], tgt: [0, GX - 5, 0] },
   { name: 'Blades', pos: [0.7, FY + 3.6, 1.0], tgt: [0, FY - 0.3, 0] },
   { name: 'Window', pos: [6.2, FY + 1.0, 1.2], tgt: [0, FY + 0.2, 0] },
   { name: 'Portal', pos: [8.2, 2.3, 0.9], tgt: [0, 1.6, 0] },
   { name: 'Follow', follow: true },
 ].map(c => c.follow ? c : { ...c, pos: c.pos.map(v => v * S), tgt: c.tgt.map(v => v * S) });
-let camTween = null;
+let camTween = null, camFov = 48;   // camFov: this view's vertical field of view on a landscape screen
+function setLens(f) { if (f !== camFov) { camFov = f; if (particles) resize(); } }
 function setCamera(i, instant) {
   camMode = i;
   const c = CAMS[i];
@@ -133,9 +136,10 @@ function setCamera(i, instant) {
   if (c.follow) { toast('Follow cam: tracks your last throw'); return; }
   const to = { pos: new THREE.Vector3(...c.pos), tgt: new THREE.Vector3(...c.tgt) };
   // portrait phones: the wide shots come in closer, so the 46 m tower fills the tall frame
-  if (camera.aspect < 0.9 && (i === 0 || i === 4)) to.pos.lerp(to.tgt, 0.48);
-  if (instant) { camera.position.copy(to.pos); controls.target.copy(to.tgt); controls.update(); return; }
-  camTween = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to, t: 0 };
+  if (camera.aspect < 0.9 && i === 4) to.pos.lerp(to.tgt, 0.48);
+  to.fov = c.fov || 48;
+  if (instant) { camera.position.copy(to.pos); controls.target.copy(to.tgt); controls.update(); setLens(to.fov); return; }
+  camTween = { from: { pos: camera.position.clone(), tgt: controls.target.clone(), fov: camFov }, to, t: 0 };
 }
 
 // ------------------------------------------------------------------------------- bodies
@@ -1691,6 +1695,7 @@ function loop(now) {
     const e = 1 - Math.pow(1 - camTween.t, 3);
     camera.position.lerpVectors(camTween.from.pos, camTween.to.pos, e);
     controls.target.lerpVectors(camTween.from.tgt, camTween.to.tgt, e);
+    setLens(camTween.from.fov + (camTween.to.fov - camTween.from.fov) * e);
     if (camTween.t >= 1) camTween = null;
   }
   if (push) stepPush(fdt);
@@ -1705,6 +1710,7 @@ function loop(now) {
     }
   }
   controls.update();
+  if (camera.position.y < 0.5) { camera.position.y = 0.5; camera.lookAt(controls.target); }   // never under the floor
   sign.update(fdt, camera);
   safety?.tick(now / 1000);
   const imb = imbalance();                      // a bent blade throws the rotor out of balance

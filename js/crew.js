@@ -79,7 +79,7 @@ export function buildCrew(scene) {
   // the climber faces the ladder
   face(climber.g, -out.x, -out.z);
   // the floor crew stands by the safety board, looking up at the tower
-  boss.g.position.set(17.2, 0, 9.2);   // between the portal and the Overview camera, by the parked car
+  boss.g.position.set(31.5, 0, 19.5);   // between the portal and the Overview camera, by the parked car
   face(boss.g, -boss.g.position.x, -boss.g.position.z);
   boss.arms[1].rotation.x = -0.9; boss.arms[1].rotation.z = 0.5;   // clipboard arm
   const clip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.22), new THREE.MeshStandardMaterial({ color: '#8a5a2b' }));
