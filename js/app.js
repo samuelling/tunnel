@@ -974,7 +974,7 @@ function openPayloadHatch(why) {
   audio.start(); audio.hit('clang', 1.5e4); setTimeout(() => audio.whoosh(40), 250);
   hatchState = 'opening'; hatchT = 0;
   stats.count('flushes');
-  if (why === 'lever' && rideOn()) { if (destination() === 'garden') toast('🎢 Ride along only goes to World Builder: this flush is going to the garden'); else startRide(); }
+  if (why === 'lever' && rideOn()) startRide();
   drops.hold = true;
   // flip mode: get Pile Cam going now (so the payload is caught as it's sent), slide over once the doors are open
   if (!ride && flipping() && !onPile) { if ($('paneSrc').value !== 'live') pileCam?.start(); setTimeout(() => showPile(true), 1300); }
@@ -1264,10 +1264,10 @@ function rideGot(d) { if (ride && !ride.drop && (d.payload || d.pieces?.length))
 function startRide() {
   if (ride) return;
   const pc = ensurePileCam();
-  ride = { t0: performance.now(), drop: null, covered: false, pileWasHere: $('pileCanvas').parentNode, pileWasRunning: pc.running };
+  // a garden flush rides the same tube but comes out of the garden's wormhole, in the garden itself
+  ride = { t0: performance.now(), drop: null, covered: false, pileWasHere: $('pileCanvas').parentNode, pileWasRunning: pc.running, garden: destination() === 'garden' };
   // Pile Cam starts now (hidden) so its heap is rebuilt by the time we arrive
-  pc.hidden = true; pc.start();
-  if (pc.first) pc.pollClock = pc.pollEvery;
+  if (!ride.garden) { pc.hidden = true; pc.start(); if (pc.first) pc.pollClock = pc.pollEvery; }
   controls.enabled = false;
   const p0 = camera.position.clone(), t0 = controls.target.clone(), f0 = camera.fov;
   const P = [p0, new THREE.Vector3(1.5, 6, 7).multiplyScalar(S), new THREE.Vector3(0.05, 1.2, 0.3).multiplyScalar(S)], T = [t0, new THREE.Vector3(0, 0.5, 0).multiplyScalar(S), new THREE.Vector3(0, -6, 0).multiplyScalar(S)];
@@ -1322,8 +1322,13 @@ function rideHops(d) {
     { at: 0.40, hop: `HOP 3 · ${colo.toUpperCase()}`, sub: d._colo ? `The nearest Cloudflare data centre (${d._colo}) catches it` : 'The nearest Cloudflare data centre catches it', color: '#ff9b3f' },
     { at: 0.53, hop: 'HOP 4 · THE WORKER', sub: d.id ? `Stamped ${String(d.id).slice(0, 8)}, slimmed to a quarter of its size` : 'Stamped, slimmed, given a seat number', color: '#9b8cff' },
     { at: 0.66, hop: 'HOP 5 · THE MAILBOX', sub: d._fuelLeft != null ? `Filed under "recent". Portal fuel left today: ${d._fuelLeft.toLocaleString()}` : 'Filed under "recent"', color: '#ff6bd6' },
-    { at: 0.79, hop: 'HOP 6 · WORLD BUILDER', sub: '"Anything new?" "Oh, you have no idea."', color: '#7df9ff' },
-    { at: 0.92, hop: 'THE SKY PORTAL · 150 M UP', sub: 'Brace.', color: '#ffffff' },
+    ...(d.to === 'garden' ? [
+      { at: 0.79, hop: 'HOP 6 · THE GARDEN OF DELIGHT', sub: 'Something is coming through the hedge', color: '#7dffb0' },
+      { at: 0.92, hop: 'THE WORMHOLE', sub: 'Mind the flowerbeds.', color: '#ffffff' },
+    ] : [
+      { at: 0.79, hop: 'HOP 6 · WORLD BUILDER', sub: '"Anything new?" "Oh, you have no idea."', color: '#7df9ff' },
+      { at: 0.92, hop: 'THE SKY PORTAL · 150 M UP', sub: 'Brace.', color: '#ffffff' },
+    ]),
   ];
 }
 function caption(hop, sub) {
@@ -1345,7 +1350,7 @@ function tubeFrame(now) {
   tube.frame(ride.u, ride.tt, dt);
   if (x >= 1) {
     // the Shred Pile is still unpacking: hang in the portal's glow for a moment (at most 6 s) so you land on the whole heap
-    if (pileCam && !pileCam.ready && ride.tt < RIDE_SECONDS + 6) { if (!ride.holding) { ride.holding = true; caption('ARRIVING…', 'The Shred Pile is unpacking itself'); } }
+    if (!ride.garden && pileCam && !pileCam.ready && ride.tt < RIDE_SECONDS + 6) { if (!ride.holding) { ride.holding = true; caption('ARRIVING…', 'The Shred Pile is unpacking itself'); } }
     else { exitTube(); return; }
   }
   requestAnimationFrame(tubeFrame);
@@ -1358,6 +1363,14 @@ function exitTube() {
   ride.phase = 'pile';
   flash(); audio.whoosh?.(80);
   const pc = pileCam, d = ride.drop;
+  if (ride.garden) {
+    // out of the wormhole: the garden itself, live, at its junk heap (it collects the payload from the mailbox as it loads)
+    $('ride').classList.add('pile', 'live'); $('rideSkip').hidden = true; $('rideLive').hidden = true;
+    $('rideFrame').src = GARDEN_URL + '&from=shredhole&t=' + Date.now();
+    caption('THE GARDEN OF DELIGHT', d ? `${(d.pieces?.length || 0).toLocaleString()} pieces coming out of the wormhole` : 'Out of the wormhole, onto the junk heap');
+    setTimeout(() => { if (ride?.garden) $('rideBack').hidden = false; }, 1500);
+    return;
+  }
   // split view showing the live world hides this canvas: show it for the landing
   ride.canvasWasHidden = $('pileCanvas').hidden; $('pileCanvas').hidden = false;
   $('ridePile').appendChild($('pileCanvas'));
@@ -1377,7 +1390,7 @@ function endRide() {
   rideLive(false); $('rideLive').hidden = true;
   if (r.canvasWasHidden) $('pileCanvas').hidden = true;
   if (pc) { pc.ride = null; pc.controls.enabled = true; pc.hidden = false; r.pileWasHere.appendChild($('pileCanvas')); if (!r.pileWasRunning || !document.body.classList.contains('split') || (flipping() && !onPile)) pc.stop(); else pc.resize(); }
-  $('ride').hidden = true; $('ride').classList.remove('pile');
+  $('ride').hidden = true; $('ride').classList.remove('pile', 'live');
   controls.enabled = true;
   setCamera(0, true); resize();
 }
