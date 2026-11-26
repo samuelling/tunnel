@@ -20,6 +20,7 @@ import { buildCrew, person, face } from './crew.js';
 import { createPost } from './post.js';
 import { buildAtmosphere } from './atmos.js';
 import { buildBubble, HALL, DOOR, RIM } from './bubble.js';
+import { createWalk } from './walk.js';
 import { buildSafetyBoard } from './safetyboard.js';
 import { WORKER_URL, WORLD_BUILDER_URL } from './settings.js';
 import { stats } from './stats.js';
@@ -37,7 +38,7 @@ const MAX_BODIES = isTouch ? 170 : 260;
 const DT = 1 / 180;
 
 let hubColliders = [], holeMode = false, holeAnim = null, holeThrottle = 70;
-let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew, post, atmos, ship;
+let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew, post, atmos, ship, walk;
 const absorbing = [];
 const audio = new Audio();
 const bodies = [];
@@ -80,7 +81,8 @@ async function boot() {
   crew = buildCrew(scene);
   atmos = buildAtmosphere(scene, { low: isTouch });
   ship = buildBubble(scene, { low: isTouch });
-  startIntro();
+  walk = createWalk({ camera, canvas: renderer.domElement, keepIn: walkBounds });
+  if (!new URLSearchParams(location.search).has('nointro')) startIntro();   // (?nointro: straight to the hall floor, for testing)
   // a real hatchback parked by the portal: the size reference everyone knows
   { const car = CATALOG.find(c => c.id === 'car'); if (car) { const b = buildObject(car), g = b.group; const bb = new THREE.Box3().setFromObject(g);
     g.position.set(17.5, -bb.min.y, 3.5); g.rotation.y = 0.5; g.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } }); scene.add(g); } }
@@ -137,7 +139,8 @@ function setCamera(i, instant) {
   camMode = i;
   const c = CAMS[i];
   $('camName') && ($('camName').textContent = c.name);
-  if (intro) { if (intro.phase === 'title') return; intro = null; controls.enabled = true; document.body.classList.remove('intro'); }   // a camera chosen mid-flight ends the flight
+  if (intro) { if (intro.phase === 'title') return; intro = null; controls.enabled = true; document.body.classList.remove('intro'); }
+  if (walk?.on) { walk.exit(); controls.enabled = true; $('btnWalk').classList.remove('on'); }   // picking a camera ends the walk   // a camera chosen mid-flight ends the flight
   if (c.follow) { toast('Follow cam: tracks your last throw'); return; }
   const to = { pos: new THREE.Vector3(...c.pos), tgt: new THREE.Vector3(...c.tgt) };
   // portrait phones: the wide shots come in closer, so the 46 m tower fills the tall frame
@@ -145,6 +148,28 @@ function setCamera(i, instant) {
   to.fov = c.fov || 48;
   if (instant) { camera.position.copy(to.pos); controls.target.copy(to.tgt); controls.update(); setLens(to.fov); return; }
   camTween = { from: { pos: camera.position.clone(), tgt: controls.target.clone(), fov: camFov }, to, t: 0 };
+}
+
+// ------------------------------------------------------------------------------- walk around
+// Where feet may go: the hall floor (not into the portal under the tower), out through the hangar door, and the yard as far
+// as the kerb at the brink. The hall's wall stops you everywhere but the door.
+function walkBounds(x, z, px, pz) {
+  let r = Math.hypot(x, z) || 1e-6; const a = Math.atan2(z, x), pr = Math.hypot(px, pz);
+  let da = a - DOOR.az; da = Math.atan2(Math.sin(da), Math.cos(da));
+  let want = Math.max(PORTAL.R + 3.2, Math.min(RIM - 3.5, r));
+  if (Math.abs(da) > DOOR.half - 2.6 / HALL.R) want = pr <= HALL.R ? Math.min(want, HALL.R - 1.4) : Math.max(want, HALL.R + 2);
+  return [x / r * want, z / r * want];
+}
+function setWalk(on) {
+  if (on === walk.on || intro || ride || push) return;
+  $('btnWalk').classList.toggle('on', on);
+  if (on) {
+    if (CAMS[camMode].follow) camMode = 0;
+    camTween = null; controls.enabled = false; setLens(62);
+    const c = CAMS[0]; walk.enter(c.pos[0], c.pos[2]);
+    $('camName') && ($('camName').textContent = 'On foot');
+    toast(isTouch ? '🚶 Walking: left thumb moves, right thumb looks. Tap 🚶 again to stop' : '🚶 Walking: W A S D or arrows, drag to look, Shift to run, Esc to stop. The hangar door is behind you');
+  } else { walk.exit(); controls.enabled = true; setCamera(camMode === 5 ? 0 : camMode, true); }
 }
 
 // ------------------------------------------------------------------------------- the opening
@@ -1139,7 +1164,7 @@ function stepHole(dt) {
 let push = null, pushedOnce = false;
 const DECK = { y: (TUN0.groundX + 0.1) * S, inner: (TUN0.R + 0.6) * S, rail: (TUN0.R + 1.85) * S };
 function wantPush(r, rad) {
-  if (ride || holeMode || rad < 0.75 || rad > TUN.R - 0.4) return false;
+  if (ride || holeMode || walk.on || rad < 0.75 || rad > TUN.R - 0.4) return false;   // (on foot you watch it from where you stand)
   const go = !pushedOnce || Math.random() < 0.4;
   if (go) pushedOnce = true;
   return go;
@@ -1304,6 +1329,7 @@ function rideGot(d) { if (ride && !ride.drop && (d.payload || d.pieces?.length))
 
 function startRide() {
   if (ride) return;
+  if (walk.on) setWalk(false);
   const pc = ensurePileCam();
   // a garden flush rides the same tube but comes out of the garden's wormhole, in the garden itself
   ride = { t0: performance.now(), drop: null, covered: false, pileWasHere: $('pileCanvas').parentNode, pileWasRunning: pc.running, garden: destination() === 'garden' };
@@ -1540,6 +1566,7 @@ const TOOL_TIPS = {
   btnBullet: ['Bullet time', 'Auto slow-mo right before the blades hit'],
   btnSmoke: ['Smoke tracers', 'Show the airflow down the tube'],
   btnHole: ['Hole mode', 'Slide the fan out of the way and just drop things down the tube'],
+  btnWalk: ['Walk around', 'Go on foot: round the hall, out the hangar door, to the brink of the ship'],
   btnAir: ['Real air', 'Live CFD on a slice through the tube: off → smoke → swirl'],
   btnGust: ['Gust', 'A sudden blast of air'],
   btnSound: ['Sound', 'Mute or unmute'],
@@ -1745,6 +1772,7 @@ function loop(now) {
 
   // camera
   if (intro) stepIntro(fdt);
+  if (walk.on) walk.step(fdt);
   if (camTween) {
     camTween.t = Math.min(1, camTween.t + fdt / 0.9);
     const e = 1 - Math.pow(1 - camTween.t, 3);
@@ -1764,7 +1792,7 @@ function loop(now) {
       camera.position.lerp(p.clone().add(d), 0.06);
     }
   }
-  controls.update();
+  if (!walk.on) controls.update();
   const camR = Math.hypot(camera.position.x, camera.position.z);
   if (camera.position.y < 0.5 && camR < RIM + 4) { camera.position.y = 0.5; camera.lookAt(controls.target); }   // never under the floor (past the brink you can drop below the slab)
   // outside the hall there is no haze, and the far clip planes move out with the camera
@@ -1858,6 +1886,8 @@ function buildUI() {
   $('btnBullet').classList.toggle('on', autoBullet);
   $('btnSmoke').onclick = () => { smokeOn = !smokeOn; $('btnSmoke').classList.toggle('on', smokeOn); };
   $('btnHole').onclick = () => setHoleMode(!holeMode);
+  $('btnWalk').onclick = () => setWalk(!walk.on);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && walk.on) setWalk(false); });
   $('btnAir').onclick = () => setRealAir(realAirMode === 'off' ? 'smoke' : realAirMode === 'smoke' ? 'swirl' : 'off');
   // on by default on desktops (smoke); phones start with it off, to spare the battery
   { let m = null; try { m = localStorage.getItem('shredRealAir'); } catch (e) { /* ignore */ } setRealAir(m || (!isTouch && innerWidth >= 900 ? 'smoke' : 'off'), true); }
@@ -1931,6 +1961,7 @@ function buildUI() {
   cv.addEventListener('pointerup', (e) => {
     if (!down) return;
     const d = down; down = null;
+    if (walk.on && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 14) return;   // on foot a drag is a look; a tap still throws
     const p0 = d.pts[0], p1 = [e.clientX, e.clientY, performance.now()];
     const dtp = Math.max(16, p1[2] - p0[2]) / 1000;
     const swipe = { x: (p1[0] - p0[0]) / dtp, y: (p1[1] - p0[1]) / dtp };
@@ -1938,6 +1969,7 @@ function buildUI() {
   });
   addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
+    if (walk.on) { if (e.key === 'h' || e.key === 'H') pullHatch(); if (e.key === 'f' || e.key === 'F' || e.key === 'o' || e.key === 'O') openPayloadHatch('lever'); return; }   // on foot, W A S D are your legs
     if (e.code === 'Space' && armed) { e.preventDefault(); throwArmed(renderer.domElement.clientWidth / 2, innerHeight / 2, null); }
     if (e.key === 'c') setCamera((camMode + 1) % CAMS.length);
     if (e.key === 'd' || e.key === 'D' || e.key === 'h' || e.key === 'H') pullHatch();

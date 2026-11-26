@@ -1,39 +1,52 @@
 // Scale cues for the 3× plant: real-size people and a caged ladder, so the eye reads the true size
-// of the thing. Three crew in hi-vis: one walking the catwalk round the intake 46 m up, one halfway
+// of the thing. Three crew (astronauts from the Garden of Delight, in hi-vis vests): one walking the catwalk round the intake 46 m up, one halfway
 // up the ladder on the tower leg facing the Overview camera, and one on the floor with a clipboard
 // by the safety board. They duck when something heavy hits.
 import * as THREE from 'three';
 import { TUN0, S } from './config.js';
+import { loadSuit, buildAstronaut, SUITS } from './astronaut.js';
 
-const skin = ['#f1c9a5', '#c68863', '#8d5524', '#e0ac69'];
 export const face = (g, dx, dz) => { g.rotation.y = -Math.atan2(dz, dx); };   // people are built facing +x
 
+// A limb the callers pose by setting rotation.z (swing forward) or rotation.x (out to the side). It moves the stand-in
+// figure's limb now, and the astronaut's once the suit has arrived.
+function limb(prim, kind, side, P) {
+  const rot = { _z: 0, _x: 0,
+    get z() { return this._z; }, set z(v) { this._z = v; prim.rotation.z = v; P.astro?.swing(side, kind, v); },
+    get x() { return this._x; }, set x(v) { this._x = v; prim.rotation.x = v; if (kind === 'arm') P.astro?.swing(side, 'armSide', v); } };
+  return { rotation: rot };
+}
+/** One of the crew: an astronaut from the Garden of Delight in a hi-vis vest. A simple figure stands in until the suit has loaded. */
 export function person(i) {
-  const g = new THREE.Group();
+  const g = new THREE.Group(), prim = new THREE.Group(); g.add(prim);
+  const P = { g, astro: null };
   const M = (c, opt = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, ...opt });
   const vest = M('#ff6a13', { emissive: '#ff4d00', emissiveIntensity: 0.25 });
   const stripe = M('#e8eef2', { emissive: '#ffffff', emissiveIntensity: 0.35, metalness: 0.3 });
-  const trousers = M('#2c3440'), boots = M('#2a1d12'), faceMat = M(skin[i % skin.length]);
-  const hat = M(['#ffd21f', '#ffffff', '#ff8a00'][i % 3], { roughness: 0.4 });
-  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
-  // legs (pivot at the hip so they can swing)
-  const legs = [-1, 1].map(s => {
-    const hip = new THREE.Group(); hip.position.set(0, 0.92, s * 0.1); g.add(hip);
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.72, 4, 8), trousers); leg.position.y = -0.44; leg.castShadow = true; hip.add(leg);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.1, 0.12), boots); boot.position.set(0.05, -0.87, 0); hip.add(boot);
+  const suit = M('#cfd3da'), boots = M('#5a5f68'), visor = M('#f0a02a', { roughness: 0.2, metalness: 0.7 });
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; prim.add(m); return m; };
+  const hips = [-1, 1].map(s => {
+    const hip = new THREE.Group(); hip.position.set(0, 0.92, s * 0.1); prim.add(hip);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.72, 4, 8), suit); leg.position.y = -0.44; leg.castShadow = true; hip.add(leg);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.14), boots); boot.position.set(0.05, -0.87, 0); hip.add(boot);
     return hip;
   });
-  add(new THREE.CapsuleGeometry(0.2, 0.42, 4, 10), vest, 0, 1.24, 0).scale.set(0.75, 1, 1);
-  for (const y of [1.12, 1.3]) add(new THREE.CylinderGeometry(0.155, 0.155, 0.04, 14), stripe, 0, y, 0).scale.set(1, 1, 1.32);
-  add(new THREE.SphereGeometry(0.1, 14, 10), faceMat, 0, 1.62, 0);
-  add(new THREE.SphereGeometry(0.125, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), hat, 0, 1.66, 0);
-  add(new THREE.CylinderGeometry(0.15, 0.15, 0.015, 16), hat, 0.02, 1.665, 0);
-  const arms = [-1, 1].map(s => {
-    const sh = new THREE.Group(); sh.position.set(0, 1.45, s * 0.24); g.add(sh);
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.5, 4, 8), vest); arm.position.y = -0.3; arm.castShadow = true; sh.add(arm);
+  add(new THREE.CapsuleGeometry(0.2, 0.42, 4, 10), vest, 0, 1.24, 0).scale.set(0.8, 1, 1);
+  for (const y of [1.12, 1.3]) add(new THREE.CylinderGeometry(0.165, 0.165, 0.04, 14), stripe, 0, y, 0).scale.set(1, 1, 1.32);
+  add(new THREE.SphereGeometry(0.16, 14, 10), suit, 0, 1.66, 0);                    // helmet
+  add(new THREE.SphereGeometry(0.11, 12, 8), visor, 0.08, 1.67, 0);                 // visor
+  const shoulders = [-1, 1].map(s => {
+    const sh = new THREE.Group(); sh.position.set(0, 1.45, s * 0.26); prim.add(sh);
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.5, 4, 8), suit); arm.position.y = -0.3; arm.castShadow = true; sh.add(arm);
     return sh;
   });
-  return { g, legs, arms };
+  P.legs = hips.map((h, k) => limb(h, 'leg', k, P)); P.arms = shoulders.map((h, k) => limb(h, 'arm', k, P));
+  loadSuit(SUITS[i % SUITS.length]).then(model => {
+    const a = buildAstronaut(model); if (!a) return;
+    P.astro = a; prim.visible = false; g.add(a.group);
+    for (const k of [0, 1]) { a.swing(k, 'leg', P.legs[k].rotation.z); a.swing(k, 'arm', P.arms[k].rotation.z); a.swing(k, 'armSide', P.arms[k].rotation.x); }
+  }).catch(() => { /* the stand-in stays */ });
+  return P;
 }
 
 export function buildCrew(scene) {
@@ -81,9 +94,9 @@ export function buildCrew(scene) {
   // the floor crew stands by the safety board, looking up at the tower
   boss.g.position.set(31.5, 0, 19.5);   // between the portal and the Overview camera, by the parked car
   face(boss.g, -boss.g.position.x, -boss.g.position.z);
-  boss.arms[1].rotation.x = -0.9; boss.arms[1].rotation.z = 0.5;   // clipboard arm
+  boss.arms[1].rotation.z = 0.95;   // clipboard arm, held out in front
   const clip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.22), new THREE.MeshStandardMaterial({ color: '#8a5a2b' }));
-  clip.position.set(0.26, 1.18, 0.18); boss.g.add(clip);
+  clip.position.set(0.5, 1.02, 0.24); clip.rotation.z = 0.5; boss.g.add(clip);
 
   let duck = 0;
   return {
@@ -107,7 +120,7 @@ export function buildCrew(scene) {
       const cl = Math.sin(y / 0.3 * Math.PI) * 0.5;
       climber.arms[0].rotation.z = 2.6 + cl * 0.4; climber.arms[1].rotation.z = 2.6 - cl * 0.4;
       climber.legs[0].rotation.z = 0.3 + cl * 0.35; climber.legs[1].rotation.z = 0.3 - cl * 0.35;
-      // floor crew: a little sway; hands over the hard hat when the plant shakes
+      // floor crew: a little sway; an arm thrown up over the helmet when the plant shakes
       boss.g.position.y = -crouch * 0.3;
       boss.arms[0].rotation.z = crouch * 2.6;
       boss.g.rotation.z = Math.sin(t * 0.7) * 0.015;
