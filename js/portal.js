@@ -43,7 +43,7 @@ export function setWholeMode(on) { try { localStorage.setItem('shredWhole', on ?
 // a recipe as it travels: what is needed to build the thing, without the jokes
 export function travelRecipe(r) {
   if (!r || !Array.isArray(r.parts)) return null;
-  return { id: r.id, name: r.name, icon: r.icon, mass: r.mass, inner: r.inner, aero: r.aero, parts: r.parts.slice(0, 40) };
+  return { id: r.id, name: r.name, icon: r.icon, mass: r.mass, inner: r.inner, aero: r.aero, ...(r.weapon ? { weapon: r.weapon } : {}), parts: r.parts.slice(0, 40) };
 }
 export function setDestination(d) { try { localStorage.setItem('shredTo', d === 'garden' ? 'garden' : 'world'); } catch (e) { /* storage blocked */ } }
 import { thinPoints, slimDrop, WIRE_POINTS } from './dropcodec.js';

@@ -172,3 +172,7 @@ The share button prints a two-sided picture postcard of your session's pile: the
 - **No iOS zooming**: double-tap and page pinch-zoom are switched off (`touch-action: manipulation`, gesture events), and text fields are 16 px on touch screens so focusing one doesn't zoom.
 - **Toolbar tips**: hover any toolbar button for its name and what it does.
 - **Smoke tracers** are on by default. **DROP IT!** is a front-facing handle that swings down toward you.
+
+## The Arsenal
+
+At the end of the shelf: Betamax's guns (samuelling/betamax), from the SIG M7 to the Glock 17, at their real masses. Each recipe (`js/arsenal.js`) was made from the gun's own model: its largest parts as boxes, at true scale. Gun steel doesn't shred, so they go through the portal whole, carrying their weapon id. Sent to the Garden of Delight, each comes out of the wormhole as the real gun, to be picked up and fired.

@@ -10,6 +10,7 @@ import { ConvexHull } from 'three/addons/math/ConvexHull.js';
 import { SPRAYS, SOUNDS, MATERIAL_NAMES } from './prompt.js';
 import { BIG_STUFF } from './bigstuff.js';
 import { VEHICLES } from './vehicles.js';
+import { ARSENAL, WEAPON_IDS } from './arsenal.js';
 const JAMMERS = new Set(['safe', 'boulder', 'manhole']);
 export { SPRAYS, SOUNDS, recipePrompt } from './prompt.js';
 export const MATERIALS = {
@@ -160,6 +161,8 @@ export const CATALOG = [
       { shape: 'cone', size: [0.15, 0.62], pos: [0, 0.34, 0], color: '#ff5a00', material: 'rubber', pattern: { type: 'bands', color: '#f4f4f4', count: 2 } },
       { shape: 'box', size: [0.36, 0.035, 0.36], pos: [0, 0.0175, 0], color: '#ff5a00', material: 'rubber' },
     ] },
+  // Betamax's guns: through the portal whole, to be picked up in the garden
+  ...ARSENAL,
 ];
 
 // ------------------------------------------------------------------------------- textures
@@ -314,6 +317,7 @@ export function sanitizeRecipe(r) {
     toughness: num(r.toughness, 20, 0.01, 1e6),
     impact: num(r.impact, 0, 0, 1e7),
     unbreakable: !!r.unbreakable, pop: !!r.pop,
+    ...(WEAPON_IDS.has(r.weapon) ? { weapon: r.weapon } : {}),
     spray: SPRAYS.includes(r.spray) ? r.spray : 'dust',
     sound: SOUNDS.includes(r.sound) ? r.sound : 'crunch',
     inner: /^#[0-9a-f]{6}$/i.test(r.inner) ? r.inner : '#cccccc',
