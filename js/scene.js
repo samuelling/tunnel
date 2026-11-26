@@ -62,7 +62,9 @@ export function buildScene(renderer) {
     for (let i = 0; i < 18; i++) { c.fillStyle = `rgba(30,28,25,${0.02 + Math.random() * 0.035})`; c.beginPath(); c.ellipse(Math.random() * w, Math.random() * h, 30 + Math.random() * 90, 20 + Math.random() * 60, Math.random() * 3, 0, 7); c.fill(); }
     c.strokeStyle = 'rgba(25,25,25,0.6)'; c.lineWidth = 3; c.strokeRect(0, 0, w, h);
   }, 12 * S);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(140 * S, 140 * S), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.62, metalness: 0.08, color: '#b9bcc4' }));
+  floorTex.repeat.set(40, 40);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(232, 128), new THREE.MeshStandardMaterial(   // out to the brink of the slab (bubble.js RIM)
+   { map: floorTex, roughness: 0.62, metalness: 0.08, color: '#b9bcc4' }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
   // a ring of stencilled warnings around the portal

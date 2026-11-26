@@ -19,6 +19,7 @@ import { PileCam } from './pilecam.js';
 import { buildCrew, person, face } from './crew.js';
 import { createPost } from './post.js';
 import { buildAtmosphere } from './atmos.js';
+import { buildBubble, HALL, DOOR, RIM } from './bubble.js';
 import { buildSafetyBoard } from './safetyboard.js';
 import { WORKER_URL, WORLD_BUILDER_URL } from './settings.js';
 import { stats } from './stats.js';
@@ -36,7 +37,7 @@ const MAX_BODIES = isTouch ? 170 : 260;
 const DT = 1 / 180;
 
 let hubColliders = [], holeMode = false, holeAnim = null, holeThrottle = 70;
-let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew, post, atmos;
+let renderer, scene, rig, portal, camera, controls, world, eventQueue, air, rotor, fan, particles, tunnel, drops, sign, safety, crew, post, atmos, ship;
 const absorbing = [];
 const audio = new Audio();
 const bodies = [];
@@ -57,10 +58,11 @@ async function boot() {
   } catch (e) { fail('Physics engine failed to load (' + e.message + ').'); return; }
   renderer = createRenderer($('c'), isTouch);
   ({ scene, rig, tunnel, portal } = buildScene(renderer));
-  camera = new THREE.PerspectiveCamera(48, 1, 0.08, 200 * S);
+  camera = new THREE.PerspectiveCamera(48, 1, 0.08, 14000);   // far enough for the stars round the ship (bubble.js)
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.maxPolarAngle = Math.PI * 0.7;   // you can get under the target and look up at the plant (the floor stops the camera, below) controls.minDistance = 1; controls.maxDistance = 45 * S;
+  controls.maxPolarAngle = Math.PI * 0.7;   // you can get under the target and look up at the plant (the floor stops the camera, below)
+  controls.minDistance = 1; controls.maxDistance = 1100;   // zoom all the way out: through the hall's wall, the bubble's skin, into space
   setCamera(0, true);
 
   world = new RAPIER.World({ x: G, y: 0, z: 0 });   // tube frame: gravity points down the axis (+x)
@@ -77,6 +79,8 @@ async function boot() {
   safety = buildSafetyBoard(scene);
   crew = buildCrew(scene);
   atmos = buildAtmosphere(scene, { low: isTouch });
+  ship = buildBubble(scene, { low: isTouch });
+  startIntro();
   // a real hatchback parked by the portal: the size reference everyone knows
   { const car = CATALOG.find(c => c.id === 'car'); if (car) { const b = buildObject(car), g = b.group; const bb = new THREE.Box3().setFromObject(g);
     g.position.set(17.5, -bb.min.y, 3.5); g.rotation.y = 0.5; g.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } }); scene.add(g); } }
@@ -133,6 +137,7 @@ function setCamera(i, instant) {
   camMode = i;
   const c = CAMS[i];
   $('camName') && ($('camName').textContent = c.name);
+  if (intro) { if (intro.phase === 'title') return; intro = null; controls.enabled = true; document.body.classList.remove('intro'); }   // a camera chosen mid-flight ends the flight
   if (c.follow) { toast('Follow cam: tracks your last throw'); return; }
   const to = { pos: new THREE.Vector3(...c.pos), tgt: new THREE.Vector3(...c.tgt) };
   // portrait phones: the wide shots come in closer, so the 46 m tower fills the tall frame
@@ -140,6 +145,42 @@ function setCamera(i, instant) {
   to.fov = c.fov || 48;
   if (instant) { camera.position.copy(to.pos); controls.target.copy(to.tgt); controls.update(); setLens(to.fov); return; }
   camTween = { from: { pos: camera.position.clone(), tgt: controls.target.clone(), fov: camFov }, to, t: 0 };
+}
+
+// ------------------------------------------------------------------------------- the opening
+// The game opens outside the ship: the bubble, the slab and the building on it, the nebula ahead. The camera drifts round it
+// while the title is up. TAP TO START flies in: down to the yard, through the hangar door, to the Overview on the hall floor.
+let intro = null;
+function startIntro() {
+  intro = { phase: 'title', t: 0 };
+  controls.enabled = false; setLens(40);
+  document.body.classList.add('intro');
+  stepIntro(0);
+}
+const _ip = new THREE.Vector3(), _it = new THREE.Vector3(), _ic = new THREE.Vector3();
+function stepIntro(dt) {
+  const I = intro; I.t += dt;
+  if (I.phase === 'title') {
+    const a = DOOR.az + 0.5 + I.t * 0.018, d = camera.aspect < 0.9 ? 760 : 720;
+    camera.position.set(Math.cos(a) * d, 150 + 20 * Math.sin(I.t * 0.05), Math.sin(a) * d);
+    controls.target.set(0, camera.aspect < 0.9 ? -10 : 10, 0);
+    return;
+  }
+  // the flight in: a curve that comes down to door height out in the yard, then straight through the door
+  const k = Math.min(1, I.t / I.T), e = k * k * k * (k * (6 * k - 15) + 10);
+  _ic.set(Math.cos(DOOR.az) * 330, 16, Math.sin(DOOR.az) * 330);
+  const u = 1 - e;
+  camera.position.set(0, 0, 0).addScaledVector(I.p0, u * u).addScaledVector(_ic, 2 * u * e).addScaledVector(I.p1, e * e);
+  controls.target.lerpVectors(I.t0, I.t1, e);
+  setLens(I.f0 + (I.f1 - I.f0) * e);
+  if (k > 0.72) document.body.classList.remove('intro');   // the controls fade up as you come through the door
+  if (k >= 1) { intro = null; controls.enabled = true; setCamera(0, true); }
+}
+function flyIn() {
+  if (!intro || intro.phase !== 'title') return;
+  const c = CAMS[0];
+  Object.assign(intro, { phase: 'fly', t: 0, T: 4.6, p0: camera.position.clone(), t0: controls.target.clone(), p1: new THREE.Vector3(...c.pos), t1: new THREE.Vector3(...c.tgt), f0: camFov, f1: c.fov || 48 });
+  audio.whoosh?.(30);
 }
 
 // ------------------------------------------------------------------------------- bodies
@@ -1703,6 +1744,7 @@ function loop(now) {
   tunnel.beaconLight.target.position.set(tunnel.beacon.position.x + Math.cos(now / 300) * 8, tunnel.beacon.position.y - 6, Math.sin(now / 300) * 8);   // tower units (1×, scaled)
 
   // camera
+  if (intro) stepIntro(fdt);
   if (camTween) {
     camTween.t = Math.min(1, camTween.t + fdt / 0.9);
     const e = 1 - Math.pow(1 - camTween.t, 3);
@@ -1723,7 +1765,14 @@ function loop(now) {
     }
   }
   controls.update();
-  if (camera.position.y < 0.5) { camera.position.y = 0.5; camera.lookAt(controls.target); }   // never under the floor
+  const camR = Math.hypot(camera.position.x, camera.position.z);
+  if (camera.position.y < 0.5 && camR < RIM + 4) { camera.position.y = 0.5; camera.lookAt(controls.target); }   // never under the floor (past the brink you can drop below the slab)
+  // outside the hall there is no haze, and the far clip planes move out with the camera
+  const out = Math.max(Math.min(1, Math.max(0, (camR - (HALL.R - 14)) / 30)), Math.min(1, Math.max(0, (camera.position.y - (HALL.H - 8)) / 16)));
+  scene.fog.near = 30 * S + out * 4000; scene.fog.far = 120 * S + out * out * 60000;
+  const nearWant = camR > 400 ? 3 : 0.08;
+  if (camera.near !== nearWant) { camera.near = nearWant; camera.updateProjectionMatrix(); }
+  ship.tick(now / 1000, camera, Math.min(devicePixelRatio || 1, 2));
   sign.update(fdt, camera);
   safety?.tick(now / 1000);
   const imb = imbalance();                      // a bent blade throws the rotor out of balance
@@ -1856,7 +1905,7 @@ function buildUI() {
   $('infoClose').onclick = () => { $('info').hidden = true; };
   $('start').onclick = () => {
     if ($('start').dataset.going) return;
-    audio.start(); stats.start(); shredTitle(); $('hatch').hidden = false; $('payload').hidden = false;
+    audio.start(); stats.start(); shredTitle(); flyIn(); $('hatch').hidden = false; $('payload').hidden = false;
     if (!armed) { const c = recipes.find(r => r.id === 'car'); if (c) arm(c); }   // a car is ready to go: pull the lever
     $('hatch').classList.toggle('idle', !armed);
     if (rotor.setpoint === 0) { thr.value = 70; setThr(); }
@@ -2340,6 +2389,6 @@ function addGenerated(raw) {
   return r;
 }
 
-window.tunnel = { addRecipe: (raw) => { addGenerated(raw); return recipes[recipes.length - 1].id; }, pushSeek: (tt) => { if (push) push.tt = tt; }, get push() { return push && { tt: push.tt, T: push.slideT + push.tipT + push.fallT, r: push.r0, rFin: push.rFin }; }, get heavyLog() { return heavyLog; }, get shake() { return shake; }, get pileCam() { return pileCam; }, camAt: (p, t) => { camTween = null; camera.position.set(...p); controls.target.set(...t); controls.update(); }, get realAir() { return realAir; }, openHatch: () => openPayloadHatch('lever'), get payload() { return payloadStat; }, get hatchState() { return hatchState; }, pile, share: () => openShare(), phys: (id) => recipePhys(recipes.find(r => r.id === id)), recipes: () => recipes, repair: () => repairFan(), get jam() { return jam; }, bladeDmg, addRecipe: addGenerated, get bodies() { return bodies; }, rotor: () => rotor, air: () => air, spawn: (id, x = -1.4) => spawnRecipe(recipes.find(r => r.id === id), new THREE.Vector3(x, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), new THREE.Vector3(2, 0, 0)), get drops() { return drops; }, setThrottle: (v) => { $('throttle').value = v; $('throttle').oninput(); }, setCamera, arm: (id) => arm(recipes.find(r => r.id === id)) };
+window.tunnel = { camPos: () => [camera.position.x, camera.position.y, camera.position.z].map(Math.round), addRecipe: (raw) => { addGenerated(raw); return recipes[recipes.length - 1].id; }, pushSeek: (tt) => { if (push) push.tt = tt; }, get push() { return push && { tt: push.tt, T: push.slideT + push.tipT + push.fallT, r: push.r0, rFin: push.rFin }; }, get heavyLog() { return heavyLog; }, get shake() { return shake; }, get pileCam() { return pileCam; }, camAt: (p, t) => { camTween = null; camera.position.set(...p); controls.target.set(...t); controls.update(); }, get realAir() { return realAir; }, openHatch: () => openPayloadHatch('lever'), get payload() { return payloadStat; }, get hatchState() { return hatchState; }, pile, share: () => openShare(), phys: (id) => recipePhys(recipes.find(r => r.id === id)), recipes: () => recipes, repair: () => repairFan(), get jam() { return jam; }, bladeDmg, addRecipe: addGenerated, get bodies() { return bodies; }, rotor: () => rotor, air: () => air, spawn: (id, x = -1.4) => spawnRecipe(recipes.find(r => r.id === id), new THREE.Vector3(x, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), new THREE.Vector3(2, 0, 0)), get drops() { return drops; }, setThrottle: (v) => { $('throttle').value = v; $('throttle').oninput(); }, setCamera, arm: (id) => arm(recipes.find(r => r.id === id)) };
 
 boot().catch(e => { console.error(e); fail(e.message); });

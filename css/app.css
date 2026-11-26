@@ -112,6 +112,8 @@ button, input { font: inherit; color: inherit; }
 .modal a { color: var(--y); }
 
 #loading, #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 20; background: radial-gradient(ellipse at center, rgba(11,13,17,0.55), rgba(11,13,17,0.92)); }
+/* the title stands over the ship seen from space: only a light shade behind the words */
+#start .t1, #start .t2, #start p { text-shadow: 0 2px 18px rgba(0,0,0,0.9); }
 #loading { background: var(--bg); }
 .ld { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .ld b { font: 54px var(--disp); color: var(--y); letter-spacing: 0.1em; }
@@ -420,3 +422,11 @@ body.split.flip #pane .paneBar b { white-space: nowrap; overflow: hidden; text-o
 .pcCard.turning img { transform: rotateY(90deg); }
 #pcFlip { position: absolute; right: 10px; bottom: 10px; background: rgba(10,8,20,.75); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 6px 12px; font: 700 12px var(--sans); cursor: pointer; }
 #pcFlip[hidden] { display: none; }
+
+/* the opening: the title over the ship seen from space; the controls wait until you have flown in */
+#start { background: linear-gradient(rgba(5,6,10,0.5), rgba(5,6,10,0) 30%, rgba(5,6,10,0) 62%, rgba(5,6,10,0.6)); align-items: stretch; }
+#start .st, .stShred .st { display: flex; flex-direction: column; align-items: center; height: 100%; box-sizing: border-box; padding: max(40px, 6vh) 20px max(40px, 7vh); }
+#start .t1, .stShred .t1 { font-size: clamp(44px, 9vw, 104px); }
+#start p, .stShred p { margin-top: auto; }
+body.intro :is(#hud, #tools, #throttleBox, #tray, #countBox, #hatch, #payload, #card, #toast, #toPile) { opacity: 0 !important; pointer-events: none !important; }
+:is(#hud, #tools, #throttleBox, #tray, #countBox, #hatch, #payload) { transition: opacity .9s; }

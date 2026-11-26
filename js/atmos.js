@@ -4,6 +4,7 @@
 // their turn. Everything here is scenery (no physics), sized in real metres so it sells the scale.
 import * as THREE from 'three';
 import { TUN0, PORTAL0, S } from './config.js';
+import { hallWall } from './bubble.js';
 
 function tex(w, h, draw, srgb = true) {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -125,8 +126,8 @@ export function buildAtmosphere(scene, { low = false } = {}) {
     for (let i = 0; i < 5000; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.25})`; c.fillRect(Math.random() * W, H * (0.4 + Math.random() * 0.35), 2 + Math.random() * 10, 2 + Math.random() * 5); }
   });
   wallTex.wrapS = THREE.RepeatWrapping; wallTex.repeat.x = -1;   // seen from inside: flip so the lettering reads
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(HALL_R, HALL_R, HALL_H, 72, 1, true), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85, metalness: 0.2, side: THREE.BackSide }));
-  wall.position.y = HALL_H / 2; g.add(wall);
+  // (the wall has the hangar door cut out of it: bubble.js)
+  g.add(hallWall(HALL_R, HALL_H, new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85, metalness: 0.2, side: THREE.BackSide }), new THREE.MeshStandardMaterial({ color: '#14171c', roughness: 0.85, metalness: 0.2, side: THREE.BackSide })));
   const roof = new THREE.Mesh(new THREE.CircleGeometry(HALL_R, 48), new THREE.MeshStandardMaterial({ color: '#07080b', roughness: 1, side: THREE.DoubleSide }));
   roof.rotation.x = Math.PI / 2; roof.position.y = HALL_H; g.add(roof);
   // roof trusses, so the dark overhead has structure in it
