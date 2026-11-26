@@ -11,6 +11,7 @@ import { SPRAYS, SOUNDS, MATERIAL_NAMES } from './prompt.js';
 import { BIG_STUFF } from './bigstuff.js';
 import { VEHICLES } from './vehicles.js';
 import { ARSENAL, WEAPON_IDS } from './arsenal.js';
+import { INSTRUMENTS, TOOL_IDS } from './instruments.js';
 const JAMMERS = new Set(['safe', 'boulder', 'manhole']);
 export { SPRAYS, SOUNDS, recipePrompt } from './prompt.js';
 export const MATERIALS = {
@@ -163,6 +164,8 @@ export const CATALOG = [
     ] },
   // Betamax's guns: through the portal whole, to be picked up in the garden
   ...ARSENAL,
+  // the Instruments: fabricated for the garden's navigators, through the portal whole
+  ...INSTRUMENTS,
 ];
 
 // ------------------------------------------------------------------------------- textures
@@ -317,7 +320,7 @@ export function sanitizeRecipe(r) {
     toughness: num(r.toughness, 20, 0.01, 1e6),
     impact: num(r.impact, 0, 0, 1e7),
     unbreakable: !!r.unbreakable, pop: !!r.pop,
-    ...(WEAPON_IDS.has(r.weapon) ? { weapon: r.weapon } : {}),
+    ...(WEAPON_IDS.has(r.weapon) || TOOL_IDS.has(r.weapon) ? { weapon: r.weapon } : {}),
     spray: SPRAYS.includes(r.spray) ? r.spray : 'dust',
     sound: SOUNDS.includes(r.sound) ? r.sound : 'crunch',
     inner: /^#[0-9a-f]{6}$/i.test(r.inner) ? r.inner : '#cccccc',

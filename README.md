@@ -176,3 +176,7 @@ The share button prints a two-sided picture postcard of your session's pile: the
 ## The Arsenal
 
 At the end of the shelf: Betamax's guns (samuelling/betamax), from the SIG M7 to the Glock 17, at their real masses. Each recipe (`js/arsenal.js`) was made from the gun's own model: its largest parts as boxes, at true scale. Gun steel doesn't shred, so they go through the portal whole, carrying their weapon id. Sent to the Garden of Delight, each comes out of the wormhole as the real gun, to be picked up and fired.
+
+## The Instruments
+
+After the guns: a **bubble sextant** (`js/instruments.js`), the first thing the Shred Hole fabricates for the garden's navigators. It carries its own horizon (a bubble), so it works where there is no sea to sight along. Brass doesn't shred either: it goes through the portal whole, carrying its tool id in the same `weapon` field the guns use. Sent to the Garden of Delight it lands by the wormhole; from the top of a tree, three stars through it fix the ship's position, the first step to getting the lost navigation back.
