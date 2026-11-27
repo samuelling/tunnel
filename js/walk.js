@@ -7,7 +7,7 @@
 // Where you may go is the caller's business (keepIn): the hall floor, out through the hangar door, the yard to the brink.
 import * as THREE from 'three';
 
-const EYE = 1.65, WALK = 2.4, RUN = 9;   // the garden's 1.6 and 5.6 m/s, stretched: this hall is three times the size of things
+const EYE = 1.65, WALK = 1.6, RUN = 5.6;   // the garden's own pace: at a walk the hall is as big as it is
 const JUMP_G = 4.2, JUMP_V = 3.4;
 const paceFor = m => m <= 0.55 ? WALK * m / 0.55 : WALK + (RUN - WALK) * Math.pow((m - 0.55) / 0.45, 1.3);   // how hard the thumb pushes, to a speed: half way is the walk
 
