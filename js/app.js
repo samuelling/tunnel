@@ -81,7 +81,7 @@ async function boot() {
   crew = buildCrew(scene);
   atmos = buildAtmosphere(scene, { low: isTouch });
   ship = buildBubble(scene, { low: isTouch });
-  walk = createWalk({ camera, canvas: renderer.domElement, keepIn: walkBounds });
+  walk = createWalk({ camera, canvas: renderer.domElement, keepIn: walkBounds, onLock: (on) => $('aim').classList.toggle('on', on && walk.on) });
   if (!new URLSearchParams(location.search).has('nointro')) startIntro();   // (?nointro: straight to the hall floor, for testing)
   // a real hatchback parked by the portal: the size reference everyone knows
   { const car = CATALOG.find(c => c.id === 'car'); if (car) { const b = buildObject(car), g = b.group; const bb = new THREE.Box3().setFromObject(g);
@@ -140,7 +140,7 @@ function setCamera(i, instant) {
   const c = CAMS[i];
   $('camName') && ($('camName').textContent = c.name);
   if (intro) { if (intro.phase === 'title') return; intro = null; controls.enabled = true; document.body.classList.remove('intro'); }
-  if (walk?.on) { walk.exit(); controls.enabled = true; $('btnWalk').classList.remove('on'); }   // picking a camera ends the walk   // a camera chosen mid-flight ends the flight
+  if (walk?.on) { walk.exit(); controls.enabled = true; $('btnWalk').classList.remove('on'); $('walkJump').hidden = true; document.body.classList.remove('walking-touch'); $('aim').classList.remove('on'); }   // picking a camera ends the walk   // a camera chosen mid-flight ends the flight
   if (c.follow) { toast('Follow cam: tracks your last throw'); return; }
   const to = { pos: new THREE.Vector3(...c.pos), tgt: new THREE.Vector3(...c.tgt) };
   // portrait phones: the wide shots come in closer, so the 46 m tower fills the tall frame
@@ -165,11 +165,12 @@ function setWalk(on) {
   $('btnWalk').classList.toggle('on', on);
   if (on) {
     if (CAMS[camMode].follow) camMode = 0;
-    camTween = null; controls.enabled = false; setLens(62);
+    camTween = null; controls.enabled = false; setLens(70);
     const c = CAMS[0]; walk.enter(c.pos[0], c.pos[2]);
     $('camName') && ($('camName').textContent = 'On foot');
-    toast(isTouch ? '🚶 Walking: left thumb moves, right thumb looks. Tap 🚶 again to stop' : '🚶 Walking: W A S D or arrows, drag to look, Shift to run, Esc to stop. The hangar door is behind you');
-  } else { walk.exit(); controls.enabled = true; setCamera(camMode === 5 ? 0 : camMode, true); }
+    toast(isTouch ? '🚶 On foot: drag the left side to walk, flick up on it to jump, drag the right side to look. Tap to throw' : '🚶 On foot: click to take the mouse, then W A S D walk · Shift runs · Space jumps · click throws · Esc lets go, Esc again stops');
+    $('walkJump').hidden = !isTouch; document.body.classList.toggle('walking-touch', isTouch);
+  } else { walk.exit(); $('walkJump').hidden = true; document.body.classList.remove('walking-touch'); $('aim').classList.remove('on'); controls.enabled = true; setCamera(camMode === 5 ? 0 : camMode, true); }
 }
 
 // ------------------------------------------------------------------------------- the opening
@@ -1887,6 +1888,7 @@ function buildUI() {
   $('btnSmoke').onclick = () => { smokeOn = !smokeOn; $('btnSmoke').classList.toggle('on', smokeOn); };
   $('btnHole').onclick = () => setHoleMode(!holeMode);
   $('btnWalk').onclick = () => setWalk(!walk.on);
+  $('walkJump').addEventListener('pointerdown', (e) => { e.preventDefault(); walk.jump(); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && walk.on) setWalk(false); });
   $('btnAir').onclick = () => setRealAir(realAirMode === 'off' ? 'smoke' : realAirMode === 'smoke' ? 'swirl' : 'off');
   // on by default on desktops (smoke); phones start with it off, to spare the battery
@@ -1950,18 +1952,21 @@ function buildUI() {
 
   // throwing
   const cv = renderer.domElement;
-  let down = null;
+  let down = null, fresh = false;
   cv.addEventListener('pointerdown', (e) => {
     if (push) { finishPush(); return; }   // tap to skip the crew
     audio.start();
     if (!armed || e.button !== 0) return;
+    if (walk.on && e.pointerType === 'mouse' && !walk.locked) { fresh = true; }   // this click takes the pointer (where it can be taken): it is not a throw
+    else fresh = false;
     down = { x: e.clientX, y: e.clientY, t: performance.now(), pts: [[e.clientX, e.clientY, performance.now()]] };
   });
   cv.addEventListener('pointermove', (e) => { if (down) { down.pts.push([e.clientX, e.clientY, performance.now()]); if (down.pts.length > 8) down.pts.shift(); } });
   cv.addEventListener('pointerup', (e) => {
     if (!down) return;
     const d = down; down = null;
-    if (walk.on && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 14) return;   // on foot a drag is a look; a tap still throws
+    if (walk.on && (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 14 || (fresh && walk.locked))) return;   // on foot a drag is a look; a tap still throws
+    if (walk.on && walk.locked) { throwArmed(cv.clientWidth / 2, cv.clientHeight / 2, null); return; }   // with the pointer taken you throw at the dot
     const p0 = d.pts[0], p1 = [e.clientX, e.clientY, performance.now()];
     const dtp = Math.max(16, p1[2] - p0[2]) / 1000;
     const swipe = { x: (p1[0] - p0[0]) / dtp, y: (p1[1] - p0[1]) / dtp };
@@ -2421,6 +2426,6 @@ function addGenerated(raw) {
   return r;
 }
 
-window.tunnel = { camPos: () => [camera.position.x, camera.position.y, camera.position.z].map(Math.round), addRecipe: (raw) => { addGenerated(raw); return recipes[recipes.length - 1].id; }, pushSeek: (tt) => { if (push) push.tt = tt; }, get push() { return push && { tt: push.tt, T: push.slideT + push.tipT + push.fallT, r: push.r0, rFin: push.rFin }; }, get heavyLog() { return heavyLog; }, get shake() { return shake; }, get pileCam() { return pileCam; }, camAt: (p, t) => { camTween = null; camera.position.set(...p); controls.target.set(...t); controls.update(); }, get realAir() { return realAir; }, openHatch: () => openPayloadHatch('lever'), get payload() { return payloadStat; }, get hatchState() { return hatchState; }, pile, share: () => openShare(), phys: (id) => recipePhys(recipes.find(r => r.id === id)), recipes: () => recipes, repair: () => repairFan(), get jam() { return jam; }, bladeDmg, addRecipe: addGenerated, get bodies() { return bodies; }, rotor: () => rotor, air: () => air, spawn: (id, x = -1.4) => spawnRecipe(recipes.find(r => r.id === id), new THREE.Vector3(x, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), new THREE.Vector3(2, 0, 0)), get drops() { return drops; }, setThrottle: (v) => { $('throttle').value = v; $('throttle').oninput(); }, setCamera, arm: (id) => arm(recipes.find(r => r.id === id)) };
+window.tunnel = { camPos3: () => [camera.position.x, camera.position.y, camera.position.z], camPos: () => [camera.position.x, camera.position.y, camera.position.z].map(Math.round), addRecipe: (raw) => { addGenerated(raw); return recipes[recipes.length - 1].id; }, pushSeek: (tt) => { if (push) push.tt = tt; }, get push() { return push && { tt: push.tt, T: push.slideT + push.tipT + push.fallT, r: push.r0, rFin: push.rFin }; }, get heavyLog() { return heavyLog; }, get shake() { return shake; }, get pileCam() { return pileCam; }, camAt: (p, t) => { camTween = null; camera.position.set(...p); controls.target.set(...t); controls.update(); }, get realAir() { return realAir; }, openHatch: () => openPayloadHatch('lever'), get payload() { return payloadStat; }, get hatchState() { return hatchState; }, pile, share: () => openShare(), phys: (id) => recipePhys(recipes.find(r => r.id === id)), recipes: () => recipes, repair: () => repairFan(), get jam() { return jam; }, bladeDmg, addRecipe: addGenerated, get bodies() { return bodies; }, rotor: () => rotor, air: () => air, spawn: (id, x = -1.4) => spawnRecipe(recipes.find(r => r.id === id), new THREE.Vector3(x, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), new THREE.Vector3(2, 0, 0)), get drops() { return drops; }, setThrottle: (v) => { $('throttle').value = v; $('throttle').oninput(); }, setCamera, arm: (id) => arm(recipes.find(r => r.id === id)) };
 
 boot().catch(e => { console.error(e); fail(e.message); });
